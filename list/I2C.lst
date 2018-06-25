@@ -1,0 +1,306 @@
+C51 COMPILER V9.01   I2C                                                                   06/22/2018 17:24:16 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE I2C
+OBJECT MODULE PLACED IN .\obj\I2C.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE src\I2C.c OPTIMIZE(SIZE) BROWSE INCDIR(.\inc) DEBUG OBJECTEXTEND PRINT(.\li
+                    -st\I2C.lst) OBJECT(.\obj\I2C.obj)
+
+line level    source
+
+   1          #define _I2C_C_
+   2          #include "I2C.h"
+   3          #include "_include.h"
+   4          
+   5          
+   6          /*start condition*/
+   7          void IIC_S_2(void)
+   8          {
+   9   1              I2C_SDA2=1;  Delay_IIC();
+  10   1              I2C_SCL2=1;  Delay_IIC();
+  11   1              I2C_SDA2=0;  Delay_IIC();
+  12   1              I2C_SCL2=0;  Delay_IIC();
+  13   1      }
+  14          
+  15          void IIC_S_3(void)
+  16          {
+  17   1              I2C_SDA3=1;  Delay_IIC();
+  18   1              I2C_SCL3=1;  Delay_IIC();
+  19   1              I2C_SDA3=0;  Delay_IIC();
+  20   1              I2C_SCL3=0;  Delay_IIC();
+  21   1      }
+  22          
+  23          /*stop condition*/
+  24          void IIC_P_2(void)
+  25          {
+  26   1              I2C_SCL2=0;  Delay_IIC();
+  27   1              I2C_SDA2=0;  Delay_IIC();
+  28   1              I2C_SCL2=1;  Delay_IIC();
+  29   1              I2C_SDA2=1;  Delay_IIC();
+  30   1      }
+  31          
+  32          void IIC_P_3(void)
+  33          {
+  34   1              I2C_SCL3=0;  Delay_IIC();
+  35   1              I2C_SDA3=0;  Delay_IIC();
+  36   1              I2C_SCL3=1;  Delay_IIC();
+  37   1              I2C_SDA3=1;  Delay_IIC();
+  38   1      }
+  39          
+  40          //wait slove acknowledge
+  41          int8u WaitACK_2(void)
+  42          {
+  43   1              int8u time = 0;
+  44   1              I2C_SCL2 = 0;  Delay_IIC();
+  45   1              I2C_SCL2 = 1;  Delay_IIC();
+  46   1              while((I2C_SDA2==1)&&(time<1000))
+  47   1              {
+  48   2                      time++;
+  49   2              }
+  50   1              if(time==100)   
+  51   1              {
+  52   2                      IIC_P_2();
+  53   2                      return 0;
+  54   2              }
+C51 COMPILER V9.01   I2C                                                                   06/22/2018 17:24:16 PAGE 2   
+
+  55   1              else
+  56   1                      return 1;
+  57   1              I2C_SCL2 = 0;  Delay_IIC();
+  58   1      }
+  59          
+  60          int8u WaitACK_3(void)
+  61          {
+  62   1              int8u time = 0;
+  63   1              I2C_SCL3 = 0;  Delay_IIC();
+  64   1              I2C_SCL3 = 1;  Delay_IIC();
+  65   1              while((I2C_SDA3==1)&&(time<1000))
+  66   1              {
+  67   2                      time++;
+  68   2              }
+  69   1              if(time==100)   
+  70   1              {
+  71   2                      IIC_P_3();
+  72   2                      return 0;
+  73   2              }
+  74   1              else
+  75   1                      return 1;
+  76   1              I2C_SCL2 = 0;  Delay_IIC();
+  77   1      }
+  78          
+  79          
+  80          
+  81          void W_Add_Ins_2(int8u add,int8u order)
+  82          {
+  83   1              int8u i;
+  84   1      
+  85   1              IIC_S_2();
+  86   1              for(i=0;i<8;i++)
+  87   1              {
+  88   2                      I2C_SCL2 = 0;  Delay_IIC();
+  89   2                      if((add<<i)&0x80)
+  90   2                              I2C_SDA2 = 1;
+  91   2                      else
+  92   2                              I2C_SDA2 = 0;
+  93   2                      I2C_SCL2 = 1;  Delay_IIC();
+  94   2              }
+  95   1      //      I2C_SDA2 = 1;  Delay_IIC();
+  96   1              if(WaitACK_2()!=1)      return;         //time out,out of
+  97   1          //write slave Add to bus
+  98   1              for(i=0;i<8;i++)
+  99   1              {
+ 100   2                      I2C_SCL2 = 0;  Delay_IIC();
+ 101   2                      if((order<<i)&0x80)
+ 102   2                              I2C_SDA2 = 1;
+ 103   2                      else
+ 104   2                              I2C_SDA2 = 0;
+ 105   2                      I2C_SCL2 = 1;  Delay_IIC();
+ 106   2              }
+ 107   1      //      if(WaitACK()!=1)        return;         //time out,out of
+ 108   1      }
+ 109          
+ 110          void W_Add_Ins_3(int8u add,int8u order)
+ 111          {
+ 112   1              int8u i;
+ 113   1      
+ 114   1              IIC_S_3();
+ 115   1              for(i=0;i<8;i++)
+ 116   1              {
+C51 COMPILER V9.01   I2C                                                                   06/22/2018 17:24:16 PAGE 3   
+
+ 117   2                      I2C_SCL3 = 0;  Delay_IIC();
+ 118   2                      if((add<<i)&0x80)
+ 119   2                              I2C_SDA3 = 1;
+ 120   2                      else
+ 121   2                              I2C_SDA3 = 0;
+ 122   2                      I2C_SCL3 = 1;  Delay_IIC();
+ 123   2              }
+ 124   1      //      I2C_SDA2 = 1;  Delay_IIC();
+ 125   1              if(WaitACK_3()!=1)      return;         //time out,out of
+ 126   1          //write slave Add to bus
+ 127   1              for(i=0;i<8;i++)
+ 128   1              {
+ 129   2                      I2C_SCL3 = 0;  Delay_IIC();
+ 130   2                      if((order<<i)&0x80)
+ 131   2                              I2C_SDA3 = 1;
+ 132   2                      else
+ 133   2                              I2C_SDA3 = 0;
+ 134   2                      I2C_SCL3 = 1;  Delay_IIC();
+ 135   2              }
+ 136   1      //      if(WaitACK()!=1)        return;         //time out,out of
+ 137   1      }
+ 138          
+ 139          /*Read register through IIC*/
+ 140          int8u IIC_Read_2(int8u add,int8u order)
+ 141          {
+ 142   1              int8u i,temp;
+ 143   1              temp = 0;
+ 144   1      
+ 145   1              W_Add_Ins_2(add,order);
+ 146   1              if(WaitACK_2()!=1)      
+ 147   1              return 0;
+ 148   1              I2C_SCL2 = 0;  Delay_IIC();
+ 149   1              IIC_S_2();
+ 150   1              add++;
+ 151   1              for(i=0;i<8;i++)
+ 152   1              {
+ 153   2                      I2C_SCL2 = 0;  Delay_IIC();
+ 154   2                      if((add<<i)&0x80)
+ 155   2                              I2C_SDA2 = 1;
+ 156   2                      else
+ 157   2                              I2C_SDA2 = 0;
+ 158   2                      I2C_SCL2 = 1;  Delay_IIC();
+ 159   2              }
+ 160   1              if(WaitACK_2()!=1)      
+ 161   1              return 0;
+ 162   1              for(i=0;i<8;i++)
+ 163   1              {
+ 164   2                      I2C_SCL2 = 0;  Delay_IIC();
+ 165   2                      I2C_SCL2 = 1;  Delay_IIC();
+ 166   2                      if(I2C_SDA2 == 1)
+ 167   2                      temp|=(0x80>>i);
+ 168   2              }
+ 169   1              I2C_SCL2 = 0;  Delay_IIC();
+ 170   1              I2C_SDA2 = 1;  Delay_IIC();
+ 171   1              I2C_SCL2 = 1;  Delay_IIC();
+ 172   1      
+ 173   1              IIC_P_2();
+ 174   1      
+ 175   1              return temp;
+ 176   1      }
+ 177          
+ 178          int8u IIC_Read_3(int8u add,int8u order)
+C51 COMPILER V9.01   I2C                                                                   06/22/2018 17:24:16 PAGE 4   
+
+ 179          {
+ 180   1              int8u i,temp;
+ 181   1              temp = 0;
+ 182   1      
+ 183   1              W_Add_Ins_3(add,order);
+ 184   1              if(WaitACK_3()!=1)      
+ 185   1              return 0;
+ 186   1              I2C_SCL3 = 0;  Delay_IIC();
+ 187   1              IIC_S_3();
+ 188   1              add++;
+ 189   1              for(i=0;i<8;i++)
+ 190   1              {
+ 191   2                      I2C_SCL3 = 0;  Delay_IIC();
+ 192   2                      if((add<<i)&0x80)
+ 193   2                              I2C_SDA3 = 1;
+ 194   2                      else
+ 195   2                              I2C_SDA3 = 0;
+ 196   2                      I2C_SCL3 = 1;  Delay_IIC();
+ 197   2              }
+ 198   1              if(WaitACK_3()!=1)      
+ 199   1              return 0;
+ 200   1              for(i=0;i<8;i++)
+ 201   1              {
+ 202   2                      I2C_SCL3 = 0;  Delay_IIC();
+ 203   2                      I2C_SCL3 = 1;  Delay_IIC();
+ 204   2                      if(I2C_SDA3 == 1)
+ 205   2                      temp|=(0x80>>i);
+ 206   2              }
+ 207   1              I2C_SCL3 = 0;  Delay_IIC();
+ 208   1              I2C_SDA3 = 1;  Delay_IIC();
+ 209   1              I2C_SCL3 = 1;  Delay_IIC();
+ 210   1      
+ 211   1              IIC_P_3();
+ 212   1      
+ 213   1              return temp;
+ 214   1      }
+ 215          
+ 216          void IIC_Write_2(int8u add,int8u order,int8u dat)
+ 217          {
+ 218   1              int8u i;
+ 219   1              W_Add_Ins_2(add,order);
+ 220   1              if(WaitACK_2()!=1)      
+ 221   1              return;
+ 222   1              I2C_SCL2 = 0;  Delay_IIC();
+ 223   1              for(i=0;i<8;i++)
+ 224   1              {
+ 225   2                      I2C_SCL2 = 0;  Delay_IIC();
+ 226   2                      if((dat<<i)&0x80)
+ 227   2                              I2C_SDA2 = 1;
+ 228   2                      else
+ 229   2                              I2C_SDA2 = 0;
+ 230   2                      I2C_SCL2 = 1;  Delay_IIC();
+ 231   2              }
+ 232   1              if(WaitACK_2()!=1)      
+ 233   1              return;
+ 234   1              IIC_P_2();
+ 235   1      }
+ 236          
+ 237          void IIC_Write_3(int8u add,int8u order,int8u dat)
+ 238          {
+ 239   1              int8u i;
+ 240   1              W_Add_Ins_3(add,order);
+C51 COMPILER V9.01   I2C                                                                   06/22/2018 17:24:16 PAGE 5   
+
+ 241   1              if(WaitACK_3()!=1)      
+ 242   1              return;
+ 243   1              I2C_SCL3 = 0;  Delay_IIC();
+ 244   1              for(i=0;i<8;i++)
+ 245   1              {
+ 246   2                      I2C_SCL3 = 0;  Delay_IIC();
+ 247   2                      if((dat<<i)&0x80)
+ 248   2                              I2C_SDA3 = 1;
+ 249   2                      else
+ 250   2                              I2C_SDA3 = 0;
+ 251   2                      I2C_SCL3 = 1;  Delay_IIC();
+ 252   2              }
+ 253   1              if(WaitACK_3()!=1)      
+ 254   1              return;
+ 255   1              IIC_P_3();
+ 256   1      }
+ 257          
+ 258          void IIC_StorOrRestor_2(int8u add,int8u order)
+ 259          {
+ 260   1              W_Add_Ins_2(add,order);
+ 261   1              if(WaitACK_2()!=1)      
+ 262   1              return;
+ 263   1              IIC_P_2();
+ 264   1      }
+ 265          
+ 266          void IIC_StorOrRestor_3(int8u add,int8u order)
+ 267          {
+ 268   1              W_Add_Ins_3(add,order);
+ 269   1              if(WaitACK_3()!=1)      
+ 270   1              return;
+ 271   1              IIC_P_3();
+ 272   1      }
+ 273          
+ 274          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    838    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      18
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,315 @@
+C51 COMPILER V9.01   SMBUS                                                                 01/22/2018 16:31:23 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE SMBUS
+OBJECT MODULE PLACED IN .\obj\smbus.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE src\smbus.c OPTIMIZE(SIZE) BROWSE INCDIR(.\inc) DEBUG OBJECTEXTEND PRINT(.\
+                    -list\smbus.lst) OBJECT(.\obj\smbus.obj)
+
+line level    source
+
+   1          //-----------------------------------------------------------------------------
+   2          // F500_SMBus_Master_Multibyte.c
+   3          //-----------------------------------------------------------------------------
+   4          // Copyright 2008 Silicon Laboratories, Inc.
+   5          // http://www.silabs.com
+   6          //
+   7          // Program Description:
+   8          //
+   9          // Example software to demonstrate the C8051F500 SMBus interface in
+  10          // Master mode.
+  11          // - Interrupt-driven SMBus implementation
+  12          // - Only master states defined (no slave or arbitration)
+  13          // - multiple-byte SMBus data holders used for each transmit and receive
+  14          // - Timer1 used as SMBus clock source
+  15          // - Timer3 used by SMBus for SCL low timeout detection
+  16          // - SCL frequency defined by <SMB_FREQUENCY> constant
+  17          // - ARBLOST support included
+  18          // - supports multiple-byte writes and multiple-byte reads
+  19          // - Pinout:
+  20          //    P0.0 -> SDA (SMBus)
+  21          //    P0.1 -> SCL (SMBus)
+  22          //    P1.3 -> LED
+  23          //
+  24          // How To Test:
+  25          //
+  26          // 1) Verify that J22 is not populated.
+  27          // 2) Download code to a 'F500 device that is connected to a SMBus slave.
+  28          // 3) Run the code:
+  29          //         a) The test will indicate proper communication with the EEPROM by
+  30          //            toggling the LED on and off each time a value is sent and
+  31          //            received.
+  32          //         b) The best method to view the proper functionality is to run to
+  33          //            the indicated line of code in the TEST CODE section of main and
+  34          //            view the SMB_DATA_IN and SMB_DATA_OUT variable arrays in the
+  35          //            Watch Window.
+  36          //
+  37          // Target:         C8051F500 (Side A of a C8051F500-TB)
+  38          // Tool chain:     Raisonance / Keil / SDCC
+  39          // Command Line:   None
+  40          //
+  41          // Release 1.2 / 02 MAR 2010 (GP)
+  42          //    -Tested with Raisonance
+  43          //
+  44          // Release 1.1 / 08 OCT 2008 (GP)
+  45          //    -Corrected Timer 3 interrupt initialization
+  46          //
+  47          // Release 1.0 / 06 MAR 2008 (GP)
+  48          //    -Initial Revision
+  49          //
+  50          
+  51          //-----------------------------------------------------------------------------
+  52          // Includes
+  53          //-----------------------------------------------------------------------------
+  54          #include "_include.h"
+C51 COMPILER V9.01   SMBUS                                                                 01/22/2018 16:31:23 PAGE 2   
+
+  55          
+  56          #define _SMBUS_C_
+  57          
+  58          //-----------------------------------------------------------------------------
+  59          // Global VARIABLES
+  60          //-----------------------------------------------------------------------------
+  61          
+  62          // Global holder for SMBus data
+  63          // All receive data is written here
+  64          //U8 SMB_DATA_IN[NUM_BYTES_RD];
+  65          //
+  66          //// Global holder for SMBus data.
+  67          //// All transmit data is read from here
+  68          //U8 SMB_DATA_OUT[NUM_BYTES_WR];
+  69          
+  70          
+  71          U8 temp=0x00;
+  72          
+  73          bit SMB_BUSY;                          // Software flag to indicate when the
+  74                                                 // SMB_Read() or SMB_Write() functions
+  75                                                 // have claimed the SMBus
+  76          
+  77          bit SMB_RW;                            // Software flag to indicate the
+  78                                                 // direction of the current transfer
+  79          U16 NUM_ERRORS;                        // Counter for the number of errors.
+  80          
+  81          
+  82          //-----------------------------------------------------------------------------
+  83          // Interrupt Service Routines
+  84          //-----------------------------------------------------------------------------
+  85           U8 TARGET;                             // Target SMBus slave address
+  86                                                 // Master <- Slave
+  87           U8 SMB_DATA_IN;                        // Global holder for SMBus data
+  88                                                 // All receive data is written here
+  89          U8 SMB_DATA_OUT;                       // Global holder for SMBus data.
+  90          //-----------------------------------------------------------------------------
+  91          // Interrupt Service Routines
+  92          //-----------------------------------------------------------------------------
+  93          
+  94          //-----------------------------------------------------------------------------
+  95          // SMBus Interrupt Service Routine (ISR)
+  96          //-----------------------------------------------------------------------------
+  97          //
+  98          // SMBus ISR state machine
+  99          // - Master only implementation - no slave or arbitration states defined
+ 100          // - All incoming data is written to global variable <SMB_DATA_IN>
+ 101          // - All outgoing data is read from global variable <SMB_DATA_OUT>
+ 102          //
+ 103          //-----------------------------------------------------------------------------
+ 104          void SMBUS0_INTERRUPT(void) interrupt INTERRUPT_SMBUS0
+ 105          {
+ 106   1         bit FAIL = 0;                       // Used by the ISR to flag failed
+ 107   1                                             // transfers
+ 108   1         static bit ADDR_SEND = 0;           // Used by the ISR to flag byte
+ 109   1                                             // transmissions as slave addresses
+ 110   1         temp=0x41;
+ 111   1         if (ARBLOST == 0)                   // Check for errors
+ 112   1         {
+ 113   2            // Normal operation
+ 114   2            switch (SMB0CN & 0xF0)           // Status vector
+ 115   2            {
+ 116   3               // Master Transmitter/Receiver: START condition transmitted.
+C51 COMPILER V9.01   SMBUS                                                                 01/22/2018 16:31:23 PAGE 3   
+
+ 117   3               case SMB_MTSTA:
+ 118   3                       temp=0x40;
+ 119   3                  SMB0DAT = TARGET;          // Load address of the target slave
+ 120   3                  SMB0DAT &= 0xFE;           // Clear the LSB of the address for the
+ 121   3                                             // R/W bit
+ 122   3                  SMB0DAT |= SMB_RW;         // Load R/W bit
+ 123   3                  STA = 0;                   // Manually clear START bit
+ 124   3                  ADDR_SEND = 1;
+ 125   3                  break;
+ 126   3      
+ 127   3               // Master Transmitter: Data byte transmitted
+ 128   3               case SMB_MTDB:
+ 129   3                  if (ACK)                   // Slave ACK?
+ 130   3                  {
+ 131   4                                      temp++;
+ 132   4                     if (ADDR_SEND)          // If the previous byte was a slave
+ 133   4                     {                       // address,
+ 134   5                        ADDR_SEND = 0;       // Next byte is not a slave address
+ 135   5                        if (SMB_RW == SMBUS_WRITE) // If this transfer is a WRITE,
+ 136   5                        {
+ 137   6                           // send data byte
+ 138   6                           SMB0DAT = SMB_DATA_OUT;
+ 139   6                        }
+ 140   5                        else {}              // If this transfer is a READ,
+ 141   5                                             // proceed with transfer without
+ 142   5                                             // writing to SMB0DAT (switch
+ 143   5                                             // to receive mode)
+ 144   5                     }
+ 145   4                     else                    // If previous byte was not a slave
+ 146   4                     {                       // address,
+ 147   5                        STO = 1;             // Set STO to terminate transfer
+ 148   5                        SMB_BUSY = 0;        // And free SMBus interface
+ 149   5                     }
+ 150   4                  }
+ 151   3                  else                       // If slave NACK,
+ 152   3                  {
+ 153   4                     STO = 1;                // Send STOP condition, followed
+ 154   4                     STA = 1;                // By a START
+ 155   4                     NUM_ERRORS++;           // Indicate error
+ 156   4                  }
+ 157   3                  break;
+ 158   3      
+ 159   3               // Master Receiver: byte received
+ 160   3               case SMB_MRDB:
+ 161   3                  SMB_DATA_IN = SMB0DAT;     // Store received byte
+ 162   3                  SMB_BUSY = 0;              // Free SMBus interface
+ 163   3                  ACK = 0;                   // Send NACK to indicate last byte
+ 164   3                                             // of this transfer
+ 165   3      
+ 166   3                  STO = 1;                   // Send STOP to terminate transfer
+ 167   3                  break;
+ 168   3      
+ 169   3               default:
+ 170   3                  FAIL = 1;                  // Indicate failed transfer
+ 171   3                                             // and handle at end of ISR
+ 172   3                  break;
+ 173   3      
+ 174   3            } // end switch
+ 175   2         }
+ 176   1         else
+ 177   1         {
+ 178   2            // ARBLOST = 1, error occurred... abort transmission
+C51 COMPILER V9.01   SMBUS                                                                 01/22/2018 16:31:23 PAGE 4   
+
+ 179   2            FAIL = 1;
+ 180   2         } // end ARBLOST if
+ 181   1      
+ 182   1         if (FAIL)                           // If the transfer failed,
+ 183   1         {
+ 184   2            SMB0CF &= ~0x80;                 // Reset communication
+ 185   2            SMB0CF |= 0x80;
+ 186   2            STA = 0;
+ 187   2            STO = 0;
+ 188   2            ACK = 0;
+ 189   2      
+ 190   2            SMB_BUSY = 0;                    // Free SMBus
+ 191   2      
+ 192   2            FAIL = 0;
+ 193   2      
+ 194   2            NUM_ERRORS++;                    // Indicate an error occurred
+ 195   2         }
+ 196   1      
+ 197   1         SI = 0;                             // Clear interrupt flag
+ 198   1      }
+ 199          
+ 200          //-----------------------------------------------------------------------------
+ 201          // Timer3 Interrupt Service Routine (ISR)
+ 202          //-----------------------------------------------------------------------------
+ 203          //
+ 204          // A Timer3 interrupt indicates an SMBus SCL low timeout.
+ 205          // The SMBus is disabled and re-enabled here
+ 206          //
+ 207          //-----------------------------------------------------------------------------
+ 208          INTERRUPT(TIMER3_ISR, INTERRUPT_TIMER3)
+ 209          {
+ 210   1         SMB0CF &= ~0x80;                    // Disable SMBus
+ 211   1         SMB0CF |= 0x80;                     // Re-enable SMBus
+ 212   1         TMR3CN &= ~0x80;                    // Clear Timer3 interrupt-pending
+ 213   1                                             // flag
+ 214   1         STA = 0;
+ 215   1         SMB_BUSY = 0;                       // Free SMBus
+ 216   1      }
+ 217          
+ 218          //-----------------------------------------------------------------------------
+ 219          // Support Functions
+ 220          //-----------------------------------------------------------------------------
+ 221          
+ 222          //-----------------------------------------------------------------------------
+ 223          // SMB_Write
+ 224          //-----------------------------------------------------------------------------
+ 225          //
+ 226          // Return Value : None
+ 227          // Parameters   : None
+ 228          //
+ 229          // Writes a single byte to the slave with address specified by the <TARGET>
+ 230          // variable.
+ 231          // Calling sequence:
+ 232          // 1) Write target slave address to the <TARGET> variable
+ 233          // 2) Write outgoing data to the <SMB_DATA_OUT> variable array
+ 234          // 3) Call SMB_Write()
+ 235          //
+ 236          //-----------------------------------------------------------------------------
+ 237          void SMB_Write (void)
+ 238          {
+ 239   1         U8 SFRPAGE_save = SFRPAGE;
+ 240   1         SFRPAGE = ACTIVE_PAGE;
+C51 COMPILER V9.01   SMBUS                                                                 01/22/2018 16:31:23 PAGE 5   
+
+ 241   1         
+ 242   1         while (SMB_BUSY);                   // Wait for SMBus to be free.
+ 243   1         SMB_BUSY = 1;                       // Claim SMBus (set to busy)
+ 244   1         SMB_RW = 0;                         // Mark this transfer as a WRITE
+ 245   1         STA = 1;                            // Start transfer
+ 246   1         SFRPAGE = SFRPAGE_save;
+ 247   1              
+ 248   1      }
+ 249          
+ 250          //-----------------------------------------------------------------------------
+ 251          // SMB_Read
+ 252          //-----------------------------------------------------------------------------
+ 253          //
+ 254          // Return Value : None
+ 255          // Parameters   : None
+ 256          //
+ 257          // Reads a single byte from the slave with address specified by the <TARGET>
+ 258          // variable.
+ 259          // Calling sequence:
+ 260          // 1) Write target slave address to the <TARGET> variable
+ 261          // 2) Call SMB_Write()
+ 262          // 3) Read input data from <SMB_DATA_IN> variable array
+ 263          //
+ 264          //-----------------------------------------------------------------------------
+ 265          void SMB_Read (void)
+ 266          {
+ 267   1         U8 SFRPAGE_save = SFRPAGE;
+ 268   1         SFRPAGE = ACTIVE_PAGE;
+ 269   1         while (SMB_BUSY);                   // Wait for bus to be free.
+ 270   1         SMB_BUSY = 1;                       // Claim SMBus (set to busy)
+ 271   1         SMB_RW = 1;                         // Mark this transfer as a READ
+ 272   1         STA = 1;                            // Start transfer
+ 273   1      
+ 274   1         while (SMB_BUSY);                   // Wait for transfer to complete
+ 275   1      
+ 276   1         SFRPAGE = SFRPAGE_save;
+ 277   1      }
+ 278          
+ 279          
+ 280          
+ 281          //-----------------------------------------------------------------------------
+ 282          // End Of File
+ 283          //-----------------------------------------------------------------------------
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    189    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      6    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      3       1
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

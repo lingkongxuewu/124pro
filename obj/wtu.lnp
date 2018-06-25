@@ -1,0 +1,11 @@
+".\obj\STARTUP.obj",
+".\obj\Comm.obj",
+".\obj\Delay.obj",
+".\obj\Init.obj",
+".\obj\main.obj",
+".\obj\Send.obj",
+".\obj\Timer.obj",
+".\obj\I2C.obj",
+".\obj\Sub.obj" 
+TO ".\obj\wtu" 
+PRINT(".\list\wtu.m51") RAMSIZE(256) 

@@ -1,0 +1,286 @@
+C51 COMPILER V9.01   SEND                                                                  06/22/2018 17:24:15 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE SEND
+OBJECT MODULE PLACED IN .\obj\Send.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE src\Send.c OPTIMIZE(SIZE) BROWSE INCDIR(.\inc) DEBUG OBJECTEXTEND PRINT(.\l
+                    -ist\Send.lst) OBJECT(.\obj\Send.obj)
+
+line level    source
+
+   1          /*--------------------------------文*件*信*息-----------------------------
+   2          * 文件名：  Send.c
+   3          * 版　本：  v1.0
+   4          * 描  述：  100T双轴 整合后的版本
+   5          * 创建人：  
+   6          * 日  期：  
+   7          --------------------------------------------------------------------------
+   8          *当前版本:      v1.0
+   9          *修 改 人:
+  10          *日　  期:
+  11          ----------------------------------修改履历--------------------------------
+  12          1、
+  13          2、
+  14          3、
+  15          4、
+  16          ------------------------------------------------------------------------*/
+  17          #define   __SEND_C__
+  18          #include  "_Include.h"
+  19          
+  20          static void Send_RDeal ( char* buf,int8u n);
+  21          static void Send_CDeal ( char* buf,int8u n);
+  22          static void Send_SDeal ( char* buf,int8u n);
+  23          
+  24          
+  25          
+  26          code int16u  SendSpeed[]={3990,943,462,298,223,168,146,119,103,85};
+  27                                                                  // 1/4   1   2   3   4   5   6   7   8   9
+  28                                                                  
+  29              //                          0    1     2     3      4      5      6      7      8      9      
+  30              code int32u Braud[10] = { 1200, 2400, 4800, 9600, 14400, 19200, 38400, 56000, 57600, 115200 };
+  31          
+  32          
+  33          //***********************************************************************/
+  34          // *功    能：
+  35          // *入    口：CommTimer时间到 ，CommRxFlag有接收完成标志
+  36          // *出    口：
+  37          // *备    注：
+  38          // *函数性质：
+  39          //***********************************************************************/
+  40          void Send_TimeProc (void)
+  41          {   static xdata int8u rx_buf[COMM_RX_BUF_SIZE];
+  42   1          static int8u* ptr;
+  43   1          static int8u xdata i;
+  44   1          static int8u xdata err;
+  45   1          static int8u xdata cmd;
+  46   1      
+  47   1      //    if(COMM_TRAN==Comm_StateGet()) return;             //COMM_TRAN==0，CommTimer减到0返回1进入COM处理，CommTimer减
+             -没到0返回0
+  48   1          if(CommRxFlag==0)   return;                                  //接收标志
+  49   1          CommRxFlag = 0;
+  50   1          ptr=rx_buf;                                                                  
+  51   1          for(i=0;i<COMM_RX_BUF_SIZE;i++)
+  52   1          {   
+  53   2                      *ptr++=Comm_GetChar(&err);                                //将接收缓冲区的数据 取出存入 rx_buf
+C51 COMPILER V9.01   SEND                                                                  06/22/2018 17:24:15 PAGE 2   
+
+  54   2              if(err==COMM_RX_EPT)                                     //COMM_RX_EPT ==1      取完标志
+  55   2              break;
+  56   2          }
+  57   1          if(i<3)
+  58   1          {
+  59   2              return;
+  60   2          }
+  61   1          if((0x0D!=rx_buf[i-2])||(0x0A!=rx_buf[i-1]))         //判断后两位数据是否是回车换行
+  62   1          return;
+  63   1      
+  64   1      
+  65   1              cmd=rx_buf[0];
+  66   1          switch(cmd)
+  67   1          { 
+  68   2                case 'r': Send_RDeal(rx_buf,i);
+  69   2                      break;
+  70   2            case 's': Send_SDeal(rx_buf,i);
+  71   2                      break;
+  72   2          }
+  73   1      }
+  74          //***********************************************************************/
+  75          // *功    能：
+  76          // *入    口：
+  77          // *出    口：
+  78          // *备    注：
+  79          // *函数性质：
+  80          //***********************************************************************/
+  81          static void Send_RDeal ( char* buf,int8u n)
+  82          {   
+  83   1              int8u xdata data_8u,temp,dir;
+  84   1              int8u xdata arr[3];
+  85   1      
+  86   1              if(0==strncmp(buf,"rd rdac,",8))
+  87   1              {
+  88   2                      if(n!=15)return;
+  89   2                      data_8u=Sub_Str2Int8u(&buf[8]);
+  90   2                      dir = buf[12];//Sub_Str2Int8u(&buf[12]);
+  91   2                      if(dir == 'x')
+  92   2                      {
+  93   3                              if(data_8u==2)
+  94   3                              {
+  95   4                                      temp=IIC_Read_2(Add2_Slave,WR_RDAC);
+  96   4                              Comm_PutStr("RDAC2 value,",12);
+  97   4                                      Sub_Int8u2Str(arr,temp);
+  98   4                                      Comm_PutStr(arr,3);
+  99   4      //                              Comm_PutChar(13);
+ 100   4                                      Comm_PutChar(0x67);
+ 101   4                                      Comm_SendSta();
+ 102   4                              }
+ 103   3                              else if(data_8u==3)
+ 104   3                              {
+ 105   4                                      temp=IIC_Read_2(Add3_Slave,WR_RDAC);
+ 106   4                              Comm_PutStr("RDAC3 value,",12);
+ 107   4                                      Sub_Int8u2Str(arr,temp);
+ 108   4                                      Comm_PutStr(arr,3);
+ 109   4      //                              Comm_PutChar(13);
+ 110   4                                      Comm_PutChar(10);
+ 111   4                                      Comm_SendSta();
+ 112   4                              }
+ 113   3                              else
+ 114   3                              {
+ 115   4                                      Comm_PutStr("error",5);
+C51 COMPILER V9.01   SEND                                                                  06/22/2018 17:24:15 PAGE 3   
+
+ 116   4                                      Comm_SendSta();
+ 117   4                              }
+ 118   3                      }
+ 119   2                      else if(dir == 'y')
+ 120   2                      {
+ 121   3                              if(data_8u==2)
+ 122   3                              {
+ 123   4                                      temp=IIC_Read_3(Add2_Slave,WR_RDAC);
+ 124   4                              Comm_PutStr("RDAC2 value,",12);
+ 125   4                                      Sub_Int8u2Str(arr,temp);
+ 126   4                                      Comm_PutStr(arr,3);
+ 127   4                                      Comm_PutChar(13);
+ 128   4                                      Comm_PutChar(10);
+ 129   4                                      Comm_SendSta();
+ 130   4                              }
+ 131   3                              else if(data_8u==3)
+ 132   3                              {
+ 133   4                                      temp=IIC_Read_3(Add3_Slave,WR_RDAC);
+ 134   4                              Comm_PutStr("RDAC3 value,",12);
+ 135   4                                      Sub_Int8u2Str(arr,temp);
+ 136   4                                      Comm_PutStr(arr,3);
+ 137   4                                      Comm_PutChar(13);
+ 138   4                                      Comm_PutChar(10);
+ 139   4                                      Comm_SendSta();
+ 140   4                              }
+ 141   3                              else
+ 142   3                              {
+ 143   4                                      Comm_PutStr("error",5);
+ 144   4                                      Comm_SendSta();
+ 145   4                              }
+ 146   3                      }       
+ 147   2              }
+ 148   1              else if(0==strncmp(buf,"rd m",4))
+ 149   1              {
+ 150   2                      if(n!=6)return;
+ 151   2                      Comm_PutStr("yang",4);
+ 152   2                      Comm_SendSta();
+ 153   2              }   
+ 154   1          else Sub_SendErr();
+ 155   1      }
+ 156          //***********************************************************************/
+ 157          // *功    能：
+ 158          // *入    口：
+ 159          // *出    口：
+ 160          // *备    注：
+ 161          // *函数性质：
+ 162          //***********************************************************************/
+ 163          static void Send_SDeal ( char* buf,int8u n)
+ 164          {   
+ 165   1              int8u xdata data_8u,sla_add,direc;
+ 166   1      
+ 167   1              if(0==strncmp(buf,"set rdac,",9))
+ 168   1              {
+ 169   2                      if(n!=20)return;
+ 170   2                      sla_add=Sub_Str2Int8u(&buf[9]);
+ 171   2                      data_8u=Sub_Str2Int8u(&buf[13]);
+ 172   2                      direc=buf[17];//Sub_Str2Int8u(&buf[15]);
+ 173   2                      if(direc == 'x')
+ 174   2                      {
+ 175   3                              if(sla_add==2)
+ 176   3                              {
+ 177   4                                      IIC_Write_2(Add2_Slave,WR_RDAC,data_8u);
+C51 COMPILER V9.01   SEND                                                                  06/22/2018 17:24:15 PAGE 4   
+
+ 178   4                                      IIC_StorOrRestor_2(Add2_Slave,RDAC2EEPROM);
+ 179   4                                      delay_ms(100);
+ 180   4                              Comm_PutStr("set rdac 2",10);
+ 181   4                              Sub_SendOk();
+ 182   4                              }
+ 183   3                              else if(sla_add==3)
+ 184   3                              {
+ 185   4                                      IIC_Write_2(Add3_Slave,WR_RDAC,data_8u);
+ 186   4                                      IIC_StorOrRestor_2(Add3_Slave,RDAC2EEPROM);
+ 187   4                                      delay_ms(100);
+ 188   4                              Comm_PutStr("set rdac 3",10);
+ 189   4                              Sub_SendOk();
+ 190   4                              }
+ 191   3                              else
+ 192   3                              {
+ 193   4                              Comm_PutStr("enter error",11);
+ 194   4                                      Comm_SendSta();
+ 195   4                              }
+ 196   3                      }
+ 197   2                      else if(direc == 'y')
+ 198   2                      {
+ 199   3                              if(sla_add==2)
+ 200   3                              {
+ 201   4                                      IIC_Write_3(Add2_Slave,WR_RDAC,data_8u);
+ 202   4                                      IIC_StorOrRestor_3(Add2_Slave,RDAC2EEPROM);
+ 203   4                                      delay_ms(100);
+ 204   4                              Comm_PutStr("set rdac 2",10);
+ 205   4                              Sub_SendOk();
+ 206   4                              }
+ 207   3                              else if(sla_add==3)
+ 208   3                              {
+ 209   4                                      IIC_Write_3(Add3_Slave,WR_RDAC,data_8u);
+ 210   4                                      IIC_StorOrRestor_3(Add3_Slave,RDAC2EEPROM);
+ 211   4                                      delay_ms(100);
+ 212   4                              Comm_PutStr("set rdac 3",10);
+ 213   4                              Sub_SendOk();
+ 214   4                              }
+ 215   3                              else
+ 216   3                              {
+ 217   4                              Comm_PutStr("enter error",11);
+ 218   4                                      Comm_SendSta();
+ 219   4                              }
+ 220   3                      }
+ 221   2                      else
+ 222   2                      {
+ 223   3                              Comm_PutStr("enter direct error",18);
+ 224   3                              Comm_SendSta();
+ 225   3                      }
+ 226   2      
+ 227   2      //              if(sla_add==2)
+ 228   2      //              {
+ 229   2      //                      IIC_Write(Add2_Slave,WR_RDAC,data_8u);
+ 230   2      //                      IIC_StorOrRestor(Add2_Slave,RDAC2EEPROM);
+ 231   2      //                      delay_ms(100);
+ 232   2      //              Comm_PutStr("set rdac 2",10);
+ 233   2      //              Sub_SendOk();
+ 234   2      //              }
+ 235   2      //              else if(sla_add==3)
+ 236   2      //              {
+ 237   2      //                      IIC_Write(Add3_Slave,WR_RDAC,data_8u);
+ 238   2      //                      IIC_StorOrRestor(Add3_Slave,RDAC2EEPROM);
+ 239   2      //                      delay_ms(100);
+C51 COMPILER V9.01   SEND                                                                  06/22/2018 17:24:15 PAGE 5   
+
+ 240   2      //              Comm_PutStr("set rdac 3",10);
+ 241   2      //                      Sub_SendOk();
+ 242   2      //              }
+ 243   2      //              else
+ 244   2      //              {
+ 245   2      //              Comm_PutStr("enter error",11);
+ 246   2      //                      Comm_SendSta();
+ 247   2      //              }
+ 248   2      
+ 249   2              }
+ 250   1      }
+ 251          
+ 252          
+ 253          //***********************************************************************/
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    836    ----
+   CONSTANT SIZE    =    174    ----
+   XDATA SIZE       =    204       9
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3       8
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

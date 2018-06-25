@@ -1,0 +1,595 @@
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE SMBUS_MASTER
+OBJECT MODULE PLACED IN .\obj\SMBus_Master.obj
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE src\SMBus_Master.c OPTIMIZE(SIZE) BROWSE INCDIR(.\inc) DEBUG OBJECTEXTEND P
+                    -RINT(.\list\SMBus_Master.lst) OBJECT(.\obj\SMBus_Master.obj)
+
+line level    source
+
+   1          //-----------------------------------------------------------------------------
+   2          // F41x_SMBus_Master.c
+   3          //-----------------------------------------------------------------------------
+   4          // Copyright 2006 Silicon Laboratories, Inc.
+   5          // http://www.silabs.com
+   6          //
+   7          // Program Description:
+   8          //
+   9          // Example software to demonstrate the C8051F41x SMBus interface in
+  10          // Master mode.
+  11          // - Interrupt-driven SMBus implementation
+  12          // - Only master states defined (no slave or arbitration)
+  13          // - 1-byte SMBus data holders used for each transmit and receive
+  14          // - Timer1 used as SMBus clock source
+  15          // - Timer3 used by SMBus for SCL low timeout detection
+  16          // - SCL frequency defined by <SMB_FREQUENCY> constant
+  17          // - ARBLOST support included
+  18          // - Pinout:
+  19          //    P0.0 -> SDA (SMBus)
+  20          //    P0.1 -> SCL (SMBus)
+  21          //
+  22          //    P2.1 -> LED
+  23          //
+  24          //    P2.7 -> C2D (debug interface)
+  25          //
+  26          //    all other port pins unused
+  27          //
+  28          // How To Test:
+  29          //
+  30          // 1) Download code to a 'F41x device that is connected to a SMBus slave.
+  31          // 2) Run the code:
+  32          //         a) The test will indicate proper communication with the slave by
+  33          //            toggling the LED on and off each time a value is sent and
+  34          //            received.
+  35          //         b) The best method to view the proper functionality is to run to
+  36          //            the indicated line of code in the TEST CODE section of main and
+  37          //            view the SMB_DATA_IN and SMB_DATA_OUT variables in the Watch
+  38          //            Window.
+  39          //
+  40          // NOTE: On the 'F410 Target Board, verify J13 and J14 are not populated
+  41          // before testing.
+  42          //
+  43          // FID:            41X000024
+  44          // Target:         C8051F41x
+  45          // Tool chain:     Keil C51 7.50 / Keil EVAL C51
+  46          // Command Line:   None
+  47          //
+  48          // Release 1.0
+  49          //    -Initial Revision (TP)
+  50          //    -30 MAR 2006
+  51          //
+  52          
+  53          //-----------------------------------------------------------------------------
+  54          // Includes
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 2   
+
+  55          //-----------------------------------------------------------------------------
+  56          
+  57          #include <compiler_defs.h>
+  58          #include <c8051F500_defs.h>                 // SFR declarations
+  59          
+  60          //-----------------------------------------------------------------------------
+  61          // Global CONSTANTS
+  62          //-----------------------------------------------------------------------------
+  63          
+  64          #define  SYSCLK         24000000       // System clock frequency in Hz
+  65          
+  66          
+  67          #define  SMB_FREQUENCY  10000          // Target SCL clock rate
+  68                                                 // This example supports between 10kHz
+  69                                                 // and 100kHz
+  70          
+  71          #define  WRITE          0x00           // SMBus WRITE command
+  72          #define  READ           0x01           // SMBus READ command
+  73          
+  74          // Device addresses (7 bits, LSB is a don't care)
+  75          #define  SLAVE_ADDR     0x30           // Device address for slave target
+  76          
+  77          // Status vector - top 4 bits only
+  78          #define  SMB_MTSTA      0xE0           // (MT) start transmitted
+  79          #define  SMB_MTDB       0xC0           // (MT) data byte transmitted
+  80          #define  SMB_MRDB       0x80           // (MR) data byte received
+  81          // End status vector definition
+  82          
+  83          //-----------------------------------------------------------------------------
+  84          // Global VARIABLES
+  85          //-----------------------------------------------------------------------------
+  86          unsigned char SMB_DATA_IN;             // Global holder for SMBus data
+  87                                                 // All receive data is written here
+  88          
+  89          unsigned char SMB_DATA_OUT;            // Global holder for SMBus data.
+  90                                                 // All transmit data is read from here
+  91          
+  92          unsigned char TARGET;                  // Target SMBus slave address
+  93          
+  94          bit SMB_BUSY;                          // Software flag to indicate when the
+  95                                                 // SMB_Read() or SMB_Write() functions
+  96                                                 // have claimed the SMBus
+  97          
+  98          bit SMB_RW;                            // Software flag to indicate the
+  99                                                 // direction of the current transfer
+ 100          
+ 101          unsigned long NUM_ERRORS;              // Counter for the number of errors.
+ 102          
+ 103          // 16-bit SFR declarations
+ 104          sfr16    TMR3RL   = 0x92;              // Timer3 reload registers
+*** ERROR C231 IN LINE 104 OF SRC\SMBUS_MASTER.C: 'TMR3RL': redefinition
+ 105          sfr16    TMR3     = 0x94;              // Timer3 counter registers
+*** ERROR C231 IN LINE 105 OF SRC\SMBUS_MASTER.C: 'TMR3': redefinition
+ 106          
+ 107          sbit LED = P2^1;                       // LED on port P2.1
+ 108          
+ 109          sbit SDA = P0^0;                       // SMBus on P0.0
+ 110          sbit SCL = P0^1;                       // and P0.1
+ 111          
+ 112          //-----------------------------------------------------------------------------
+ 113          // Function PROTOTYPES
+ 114          //-----------------------------------------------------------------------------
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 3   
+
+ 115          
+ 116          void SMBus_Init (void);
+ 117          void Timer1_Init (void);
+ 118          void Timer3_Init (void);
+ 119          void Port_Init (void);
+ 120          
+ 121          void SMBus_ISR (void);
+ 122          void Timer3_ISR (void);
+ 123          
+ 124          void SMB_Write (void);
+ 125          void SMB_Read (void);
+ 126          void T0_Wait_ms (unsigned char ms);
+ 127          
+ 128          //-----------------------------------------------------------------------------
+ 129          // MAIN Routine
+ 130          //-----------------------------------------------------------------------------
+ 131          //
+ 132          // Main routine performs all configuration tasks, then loops forever sending
+ 133          // and receiving SMBus data to the slave <SLAVE_ADDR>.
+ 134          //
+ 135          void main (void)
+ 136          {
+ 137   1         volatile unsigned char dat;         // Test counter
+ 138   1         unsigned char i;                    // Dummy variable counters
+ 139   1      
+ 140   1         PCA0MD &= ~0x40;                    // WDTE = 0 (watchdog timer enable bit)
+ 141   1      
+ 142   1         OSCICN |= 0x07;                     // Set internal oscillator to highest
+ 143   1                                             // setting of 24500000
+ 144   1      
+ 145   1         // If slave is holding SDA low because of an improper SMBus reset or error
+ 146   1         while(!SDA)
+ 147   1         {
+ 148   2            // Provide clock pulses to allow the slave to advance out
+ 149   2            // of its current state. This will allow it to release SDA.
+ 150   2            XBR1 = 0x40;                     // Enable Crossbar
+ 151   2            SCL = 0;                         // Drive the clock low
+ 152   2            for(i = 0; i < 255; i++);        // Hold the clock low
+ 153   2            SCL = 1;                         // Release the clock
+ 154   2            while(!SCL);                     // Wait for open-drain
+ 155   2                                             // clock output to rise
+ 156   2            for(i = 0; i < 10; i++);         // Hold the clock high
+ 157   2            XBR1 = 0x00;                     // Disable Crossbar
+ 158   2         }
+ 159   1      
+ 160   1         Port_Init ();                       // Initialize Crossbar and GPIO
+ 161   1      
+ 162   1         Timer1_Init ();                     // Configure Timer1 for use as SMBus
+ 163   1                                             // clock source
+ 164   1      
+ 165   1         Timer3_Init ();                     // Configure Timer3 for use with SMBus
+ 166   1                                             // low timeout detect
+ 167   1      
+ 168   1         SMBus_Init ();                      // Configure and enable SMBus
+ 169   1      
+ 170   1         EIE1 |= 0x01;                       // Enable the SMBus interrupt
+ 171   1      
+ 172   1         LED = 0;
+ 173   1      
+ 174   1         EA = 1;                             // Global interrupt enable
+ 175   1      
+ 176   1      // TEST CODE-------------------------------------------------------------------
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 4   
+
+ 177   1      
+ 178   1         dat = 0;                            // Output data counter
+ 179   1         NUM_ERRORS = 0;                     // Error counter
+ 180   1         while (1)
+ 181   1         {
+ 182   2            // SMBus Write Sequence
+ 183   2            SMB_DATA_OUT = dat;              // Define next outgoing byte
+ 184   2            TARGET = SLAVE_ADDR;             // Target the F3xx/Si8250 Slave for next
+ 185   2                                             // SMBus transfer
+ 186   2            SMB_Write();                     // Initiate SMBus write
+ 187   2      
+ 188   2            // SMBus Read Sequence
+ 189   2            TARGET = SLAVE_ADDR;             // Target the F3xx/Si8250 Slave for next
+ 190   2                                             // SMBus transfer
+ 191   2            SMB_Read();
+ 192   2      
+ 193   2            // Check transfer data
+ 194   2            if(SMB_DATA_IN != SMB_DATA_OUT)  // Received data match transmit data?
+ 195   2            {
+ 196   3               NUM_ERRORS++;                 // Increment error counter if no match
+ 197   3            }
+ 198   2      
+ 199   2            // Indicate that an error has occurred (LED no longer lit)
+ 200   2            if (NUM_ERRORS > 0)
+ 201   2            {
+ 202   3               LED = 0;
+ 203   3            }
+ 204   2            else
+ 205   2            {
+ 206   3               LED = ~LED;
+ 207   3            }
+ 208   2      
+ 209   2            // Run to here to view the SMB_DATA_IN and SMB_DATA_OUT variables
+ 210   2      
+ 211   2            dat++;
+ 212   2      
+ 213   2            T0_Wait_ms (1);                  // Wait 1 ms until the next cycle
+ 214   2         }
+ 215   1      
+ 216   1      // END TEST CODE---------------------------------------------------------------
+ 217   1      
+ 218   1      }
+ 219          
+ 220          //-----------------------------------------------------------------------------
+ 221          // Initialization Routines
+ 222          //-----------------------------------------------------------------------------
+ 223          
+ 224          //-----------------------------------------------------------------------------
+ 225          // SMBus_Init
+ 226          //-----------------------------------------------------------------------------
+ 227          //
+ 228          // Return Value : None
+ 229          // Parameters   : None
+ 230          //
+ 231          // SMBus configured as follows:
+ 232          // - SMBus enabled
+ 233          // - Slave mode inhibited
+ 234          // - Timer1 used as clock source. The maximum SCL frequency will be
+ 235          //   approximately 1/3 the Timer1 overflow rate
+ 236          // - Setup and hold time extensions enabled
+ 237          // - Bus Free and SCL Low timeout detection enabled
+ 238          //
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 5   
+
+ 239          void SMBus_Init (void)
+ 240          {
+ 241   1         SMB0CF = 0x5D;                      // Use Timer1 overflows as SMBus clock
+ 242   1                                             // source;
+ 243   1                                             // Disable slave mode;
+ 244   1                                             // Enable setup & hold time
+ 245   1                                             // extensions;
+ 246   1                                             // Enable SMBus Free timeout detect;
+ 247   1                                             // Enable SCL low timeout detect;
+ 248   1      
+ 249   1         SMB0CF |= 0x80;                     // Enable SMBus;
+ 250   1      }
+ 251          
+ 252          //-----------------------------------------------------------------------------
+ 253          // Timer1_Init
+ 254          //-----------------------------------------------------------------------------
+ 255          //
+ 256          // Return Value : None
+ 257          // Parameters   : None
+ 258          //
+ 259          // Timer1 configured as the SMBus clock source as follows:
+ 260          // - Timer1 in 8-bit auto-reload mode
+ 261          // - SYSCLK or SYSCLK / 4 as Timer1 clock source
+ 262          // - Timer1 overflow rate => 3 * SMB_FREQUENCY
+ 263          // - The resulting SCL clock rate will be ~1/3 the Timer1 overflow rate
+ 264          // - Timer1 enabled
+ 265          //
+ 266          void Timer1_Init (void)
+ 267          {
+ 268   1      
+ 269   1      // Make sure the Timer can produce the appropriate frequency in 8-bit mode
+ 270   1      // Supported SMBus Frequencies range from 10kHz to 100kHz.  The CKCON register
+ 271   1      // settings may need to change for frequencies outside this range.
+ 272   1      #if ((SYSCLK/SMB_FREQUENCY/3) < 255)
+                 #define SCALE 1
+                    CKCON |= 0x08;                   // Timer1 clock source = SYSCLK
+              #elif ((SYSCLK/SMB_FREQUENCY/4/3) < 255)
+ 276   1         #define SCALE 4
+ 277   1            CKCON |= 0x01;
+ 278   1            CKCON &= ~0x0A;                  // Timer1 clock source = SYSCLK / 4
+ 279   1      #endif
+ 280   1      
+ 281   1         TMOD = 0x20;                        // Timer1 in 8-bit auto-reload mode
+ 282   1      
+ 283   1         // Timer1 configured to overflow at 1/3 the rate defined by SMB_FREQUENCY
+ 284   1         TH1 = -(SYSCLK/SMB_FREQUENCY/SCALE/3);
+ 285   1      
+ 286   1         TL1 = TH1;                          // Init Timer1
+ 287   1      
+ 288   1         TR1 = 1;                            // Timer1 enabled
+ 289   1      }
+ 290          
+ 291          //-----------------------------------------------------------------------------
+ 292          // Timer3_Init
+ 293          //-----------------------------------------------------------------------------
+ 294          //
+ 295          // Return Value : None
+ 296          // Parameters   : None
+ 297          //
+ 298          // Timer3 configured for use by the SMBus low timeout detect feature as
+ 299          // follows:
+ 300          // - Timer3 in 16-bit auto-reload mode
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 6   
+
+ 301          // - SYSCLK/12 as Timer3 clock source
+ 302          // - Timer3 reload registers loaded for a 25ms overflow period
+ 303          // - Timer3 pre-loaded to overflow after 25ms
+ 304          // - Timer3 enabled
+ 305          //
+ 306          void Timer3_Init (void)
+ 307          {
+ 308   1         TMR3CN = 0x00;                      // Timer3 configured for 16-bit auto-
+ 309   1                                             // reload, low-byte interrupt disabled
+ 310   1      
+ 311   1         CKCON &= ~0x40;                     // Timer3 uses SYSCLK/12
+ 312   1      
+ 313   1         TMR3RL = -(SYSCLK/12/40);           // Timer3 configured to overflow after
+ 314   1         TMR3 = TMR3RL;                      // ~25ms (for SMBus low timeout detect):
+ 315   1                                             // 1/.025 = 40
+ 316   1      
+ 317   1         EIE1 |= 0x80;                       // Timer3 interrupt enable
+ 318   1         TMR3CN |= 0x04;                     // Start Timer3
+ 319   1      }
+ 320          
+ 321          //-----------------------------------------------------------------------------
+ 322          // PORT_Init
+ 323          //-----------------------------------------------------------------------------
+ 324          //
+ 325          // Return Value : None
+ 326          // Parameters   : None
+ 327          //
+ 328          // Configure the Crossbar and GPIO ports.
+ 329          //
+ 330          // P0.0   digital   open-drain    SMBus SDA
+ 331          // P0.1   digital   open-drain    SMBus SCL
+ 332          //
+ 333          // P2.1   digital   push-pull     LED
+ 334          //
+ 335          // all other port pins unused
+ 336          //
+ 337          // Note: If the SMBus is moved, the SCL and SDA sbit declarations must also
+ 338          // be adjusted.
+ 339          //
+ 340          void PORT_Init (void)
+ 341          {
+ 342   1         P0MDOUT = 0x00;                     // All P0 pins open-drain output
+ 343   1      
+ 344   1         P2MDOUT |= 0x02;                    // Make the LED (P2.1) a push-pull
+ 345   1                                             // output
+ 346   1      
+ 347   1         XBR0 = 0x04;                        // Enable SMBus pins
+ 348   1         XBR1 = 0x40;                        // Enable crossbar and weak pull-ups
+ 349   1      
+ 350   1         P0 = 0xFF;
+ 351   1      }
+ 352          
+ 353          //-----------------------------------------------------------------------------
+ 354          // Interrupt Service Routines
+ 355          //-----------------------------------------------------------------------------
+ 356          
+ 357          //-----------------------------------------------------------------------------
+ 358          // SMBus Interrupt Service Routine (ISR)
+ 359          //-----------------------------------------------------------------------------
+ 360          //
+ 361          // SMBus ISR state machine
+ 362          // - Master only implementation - no slave or arbitration states defined
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 7   
+
+ 363          // - All incoming data is written to global variable <SMB_DATA_IN>
+ 364          // - All outgoing data is read from global variable <SMB_DATA_OUT>
+ 365          //
+ 366          void SMBus_ISR (void) interrupt 7
+ 367          {
+ 368   1         bit FAIL = 0;                       // Used by the ISR to flag failed
+ 369   1                                             // transfers
+ 370   1         static bit ADDR_SEND = 0;           // Used by the ISR to flag byte
+ 371   1                                             // transmissions as slave addresses
+ 372   1      
+ 373   1         if (ARBLOST == 0)                   // Check for errors
+ 374   1         {
+ 375   2            // Normal operation
+ 376   2            switch (SMB0CN & 0xF0)           // Status vector
+ 377   2            {
+ 378   3               // Master Transmitter/Receiver: START condition transmitted.
+ 379   3               case SMB_MTSTA:
+ 380   3                  SMB0DAT = TARGET;          // Load address of the target slave
+ 381   3                  SMB0DAT &= 0xFE;           // Clear the LSB of the address for the
+ 382   3                                             // R/W bit
+ 383   3                  SMB0DAT |= SMB_RW;         // Load R/W bit
+ 384   3                  STA = 0;                   // Manually clear START bit
+ 385   3                  ADDR_SEND = 1;
+ 386   3                  break;
+ 387   3      
+ 388   3               // Master Transmitter: Data byte transmitted
+ 389   3               case SMB_MTDB:
+ 390   3                  if (ACK)                   // Slave ACK?
+ 391   3                  {
+ 392   4                     if (ADDR_SEND)          // If the previous byte was a slave
+ 393   4                     {                       // address,
+ 394   5                        ADDR_SEND = 0;       // Next byte is not a slave address
+ 395   5                        if (SMB_RW == WRITE) // If this transfer is a WRITE,
+ 396   5                        {
+ 397   6                           // send data byte
+ 398   6                           SMB0DAT = SMB_DATA_OUT;
+ 399   6                        }
+ 400   5                        else {}              // If this transfer is a READ,
+ 401   5                                             // proceed with transfer without
+ 402   5                                             // writing to SMB0DAT (switch
+ 403   5                                             // to receive mode)
+ 404   5                     }
+ 405   4                     else                    // If previous byte was not a slave
+ 406   4                     {                       // address,
+ 407   5                        STO = 1;             // Set STO to terminate transfer
+ 408   5                        SMB_BUSY = 0;        // And free SMBus interface
+ 409   5                     }
+ 410   4                  }
+ 411   3                  else                       // If slave NACK,
+ 412   3                  {
+ 413   4                     STO = 1;                // Send STOP condition, followed
+ 414   4                     STA = 1;                // By a START
+ 415   4                     NUM_ERRORS++;           // Indicate error
+ 416   4                  }
+ 417   3                  break;
+ 418   3      
+ 419   3               // Master Receiver: byte received
+ 420   3               case SMB_MRDB:
+ 421   3                  SMB_DATA_IN = SMB0DAT;     // Store received byte
+ 422   3                  SMB_BUSY = 0;              // Free SMBus interface
+ 423   3                  ACK = 0;                   // Send NACK to indicate last byte
+ 424   3                                             // of this transfer
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 8   
+
+ 425   3      
+ 426   3                  STO = 1;                   // Send STOP to terminate transfer
+ 427   3                  break;
+ 428   3      
+ 429   3               default:
+ 430   3                  FAIL = 1;                  // Indicate failed transfer
+ 431   3                                             // and handle at end of ISR
+ 432   3                  break;
+ 433   3      
+ 434   3            } // end switch
+ 435   2         }
+ 436   1         else
+ 437   1         {
+ 438   2            // ARBLOST = 1, error occurred... abort transmission
+ 439   2            FAIL = 1;
+ 440   2         } // end ARBLOST if
+ 441   1      
+ 442   1         if (FAIL)                           // If the transfer failed,
+ 443   1         {
+ 444   2            SMB0CF &= ~0x80;                 // Reset communication
+ 445   2            SMB0CF |= 0x80;
+ 446   2            STA = 0;
+ 447   2            STO = 0;
+ 448   2            ACK = 0;
+ 449   2      
+ 450   2            SMB_BUSY = 0;                    // Free SMBus
+ 451   2      
+ 452   2            FAIL = 0;
+ 453   2            LED = 0;
+ 454   2      
+ 455   2            NUM_ERRORS++;                    // Indicate an error occurred
+ 456   2         }
+ 457   1      
+ 458   1         SI = 0;                             // Clear interrupt flag
+ 459   1      }
+ 460          
+ 461          //-----------------------------------------------------------------------------
+ 462          // Timer3 Interrupt Service Routine (ISR)
+ 463          //-----------------------------------------------------------------------------
+ 464          //
+ 465          // A Timer3 interrupt indicates an SMBus SCL low timeout.
+ 466          // The SMBus is disabled and re-enabled here
+ 467          //
+ 468          void Timer3_ISR (void) interrupt 14
+ 469          {
+ 470   1         SMB0CF &= ~0x80;                    // Disable SMBus
+ 471   1         SMB0CF |= 0x80;                     // Re-enable SMBus
+ 472   1         TMR3CN &= ~0x80;                    // Clear Timer3 interrupt-pending flag
+ 473   1         STA = 0;
+ 474   1         SMB_BUSY = 0;                       // Free SMBus
+ 475   1      }
+ 476          
+ 477          //-----------------------------------------------------------------------------
+ 478          // Support Functions
+ 479          //-----------------------------------------------------------------------------
+ 480          
+ 481          //-----------------------------------------------------------------------------
+ 482          // SMB_Write
+ 483          //-----------------------------------------------------------------------------
+ 484          //
+ 485          // Return Value : None
+ 486          // Parameters   : None
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 9   
+
+ 487          //
+ 488          // Writes a single byte to the slave with address specified by the <TARGET>
+ 489          // variable.
+ 490          // Calling sequence:
+ 491          // 1) Write target slave address to the <TARGET> variable
+ 492          // 2) Write outgoing data to the <SMB_DATA_OUT> variable
+ 493          // 3) Call SMB_Write()
+ 494          //
+ 495          void SMB_Write (void)
+ 496          {
+ 497   1         while (SMB_BUSY);                   // Wait for SMBus to be free.
+ 498   1         SMB_BUSY = 1;                       // Claim SMBus (set to busy)
+ 499   1         SMB_RW = 0;                         // Mark this transfer as a WRITE
+ 500   1         STA = 1;                            // Start transfer
+ 501   1      }
+ 502          
+ 503          //-----------------------------------------------------------------------------
+ 504          // SMB_Read
+ 505          //-----------------------------------------------------------------------------
+ 506          //
+ 507          // Return Value : None
+ 508          // Parameters   : None
+ 509          //
+ 510          // Reads a single byte from the slave with address specified by the <TARGET>
+ 511          // variable.
+ 512          // Calling sequence:
+ 513          // 1) Write target slave address to the <TARGET> variable
+ 514          // 2) Call SMB_Write()
+ 515          // 3) Read input data from <SMB_DATA_IN> variable
+ 516          //
+ 517          void SMB_Read (void)
+ 518          {
+ 519   1         while (SMB_BUSY);                   // Wait for bus to be free.
+ 520   1         SMB_BUSY = 1;                       // Claim SMBus (set to busy)
+ 521   1         SMB_RW = 1;                         // Mark this transfer as a READ
+ 522   1      
+ 523   1         STA = 1;                            // Start transfer
+ 524   1      
+ 525   1         while (SMB_BUSY);                   // Wait for transfer to complete
+ 526   1      }
+ 527          
+ 528          //-----------------------------------------------------------------------------
+ 529          // T0_Wait_ms
+ 530          //-----------------------------------------------------------------------------
+ 531          //
+ 532          // Return Value : None
+ 533          // Parameters   :
+ 534          //   1) unsigned char ms - number of milliseconds to wait
+ 535          //                        range is full range of character: 0 to 255
+ 536          //
+ 537          // Configure Timer0 to wait for <ms> milliseconds using SYSCLK as its time
+ 538          // base.
+ 539          //
+ 540          void T0_Wait_ms (unsigned char ms)
+ 541          {
+ 542   1         TCON &= ~0x30;                      // Stop Timer0; Clear TF0
+ 543   1         TMOD &= ~0x0f;                      // 16-bit free run mode
+ 544   1         TMOD |=  0x01;
+ 545   1      
+ 546   1         CKCON |= 0x04;                      // Timer0 counts SYSCLKs
+ 547   1      
+ 548   1         while (ms) {
+C51 COMPILER V9.01   SMBUS_MASTER                                                          01/22/2018 14:21:45 PAGE 10  
+
+ 549   2            TR0 = 0;                         // Stop Timer0
+ 550   2            TH0 = -(SYSCLK/1000 >> 8);       // Overflow in 1ms
+ 551   2            TL0 = -(SYSCLK/1000);
+ 552   2            TF0 = 0;                         // Clear overflow indicator
+ 553   2            TR0 = 1;                         // Start Timer0
+ 554   2            while (!TF0);                    // Wait for overflow
+ 555   2            ms--;                            // Update ms counter
+ 556   2         }
+ 557   1      
+ 558   1         TR0 = 0;                            // Stop Timer0
+ 559   1      }
+ 560          
+ 561          //-----------------------------------------------------------------------------
+ 562          // End Of File
+ 563          //-----------------------------------------------------------------------------
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  2 ERROR(S)
