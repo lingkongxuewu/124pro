@@ -1,0 +1,206 @@
+C51 COMPILER V7.06   PRECISION_CALIBRATION                                                 08/13/2010 09:53:14 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE PRECISION_CALIBRATION
+OBJECT MODULE PLACED IN Precision_Calibration.OBJ
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE Precision_Calibration.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include "Precision_Calibration.h"   
+   2               
+   3          #include "parameter_defs.h"
+   4          #include "Function_defs.h"
+   5          #include "Interrupt_ISR.h"
+   6          #include "MyFlash.h"
+   7          #include "stdio.h"
+   8          #include "Mcu_Init.h"
+   9          #include "math.h"
+  10          
+  11          F32 Angle_Conversion(S8 angle)
+  12          {
+  13   1              F32 arc_angle;
+  14   1              arc_angle = (PI*angle)/180;
+  15   1              return arc_angle;       
+  16   1      }
+  17          
+  18          void Data_Capture(U8 angle1,U8 angle2,U16 mv)
+  19          {
+  20   1              static U8 bi=38,by=0;
+  21   1              Para_Set_Buffer[bi]=mv&0xff;
+  22   1              Para_Set_Buffer[bi+1]=mv>>8;
+  23   1              Para_Set_Buffer[bi+2]=angle1;
+  24   1              Para_Set_Buffer[bi+3]=angle2;
+  25   1              bi+=4;
+  26   1              by++;
+  27   1              Cal_Count=by;
+  28   1              Para_Set_Buffer[36]= Cal_Count;
+  29   1      //      printf("%d\n",(U16)Para_Set_Buffer[33]);
+  30   1      }
+  31          
+  32          
+  33          void Data_Capture_TC(U8 temp1,U8 temp2,U16 mv_x,U16 mv_y)
+  34          {
+  35   1              U8 bi;
+  36   1              static U8 by=0;
+  37   1              bi = 38+Para_Set_Buffer[36]*4+Tc_Count*6;
+  38   1              Para_Set_Buffer[bi]=mv_x&0xff;
+  39   1              Para_Set_Buffer[bi+1]=mv_x>>8;
+  40   1              Para_Set_Buffer[bi+2]=mv_y&0xff;
+  41   1              Para_Set_Buffer[bi+3]=mv_y>>8;
+  42   1              Para_Set_Buffer[bi+4]=temp1;
+  43   1              Para_Set_Buffer[bi+5]=temp2;
+  44   1              by++;
+  45   1              Tc_Count=by;
+  46   1              Para_Set_Buffer[37]= Tc_Count;
+  47   1      //      printf("%d\n",(U16)Para_Set_Buffer[33]);
+  48   1      }
+  49          
+  50          F32 Angle_Calculate(U16 mv,U8 xy)
+  51          {
+  52   1              F32 xdata ang;
+  53   1              U8 xdata i;
+  54   1              if((Para_Set_Buffer[33] & 0x02)==0x2)
+  55   1              {
+C51 COMPILER V7.06   PRECISION_CALIBRATION                                                 08/13/2010 09:53:14 PAGE 2   
+
+  56   2                      mv = (U16)(mv-Tc_Para_compensation(xy)*(Temperature-Tc_Buffer[0]));
+  57   2              //      printf("%d\t%f\n",(U16)mv,Tc_Para_compensation(xy));
+  58   2              }
+  59   1              
+  60   1              if(mv>=Angle_Buffer[xy][0])
+  61   1              {
+  62   2                      i=0;
+  63   2                      while(1)
+  64   2                      {
+  65   3                              if(mv>Angle_Buffer[xy][i+1])
+  66   3                              {
+  67   4                                      if(i ==((Para_Set_Buffer[36]/2-1)/2-1))
+  68   4                                      {
+  69   5                                              mv =Angle_Buffer[xy][i+1];
+  70   5                                              ang = asin((mv-a[xy][i])*k[xy][i]);
+  71   5                                              Sensor_Error = 1;
+  72   5                                              break;
+  73   5                                      }
+  74   4                                      if(i<((Para_Set_Buffer[36]/2-1)/2-1))
+  75   4                                              i++;
+  76   4                              }
+  77   3                              else
+  78   3                              {       
+  79   4                                      ang = asin((mv-a[xy][i])*k[xy][i]);
+  80   4                                      Sensor_Error = 0;
+  81   4                                      break;
+  82   4                              }
+  83   3      
+  84   3                      }
+  85   2              }
+  86   1              else
+  87   1              {
+  88   2                      i=(Para_Set_Buffer[36]/2-1)/2;
+  89   2                      while(1)
+  90   2                      {
+  91   3                              if(mv<Angle_Buffer[xy][i+1])
+  92   3                              {
+  93   4                                      if(i ==((Para_Set_Buffer[36]/2-2)))
+  94   4                                      {
+  95   5                                              mv = Angle_Buffer[xy][i+1];
+  96   5                                              ang = asin((mv-a[xy][i])*k[xy][i]);
+  97   5                                              Sensor_Error = 1;
+  98   5                                              break;
+  99   5                                      }
+ 100   4                                      if(i<(Para_Set_Buffer[36]/2-2))
+ 101   4                                              i++;
+ 102   4                              }
+ 103   3                              else
+ 104   3                              {       
+ 105   4                                      ang = asin((mv-a[xy][i])*k[xy][i]);
+ 106   4                                      Sensor_Error = 0;
+ 107   4                                      break;
+ 108   4                              }
+ 109   3                      }
+ 110   2              }
+ 111   1      
+ 112   1              switch(xy)
+ 113   1              {
+ 114   2                      case 0:
+ 115   2                              ang = ang*18000.0/PI - X_Offset;
+ 116   2                      break;
+ 117   2                      case 1:
+C51 COMPILER V7.06   PRECISION_CALIBRATION                                                 08/13/2010 09:53:14 PAGE 3   
+
+ 118   2                              ang = ang*18000.0/PI - Y_Offset;
+ 119   2                      break;
+ 120   2              }
+ 121   1              if(ang< 0)
+ 122   1              {
+ 123   2                      switch(xy)
+ 124   2                      {
+ 125   3                              case 0:
+ 126   3                                      Neg_X = 1;
+ 127   3                              break;
+ 128   3                              case 1:
+ 129   3                                      Neg_Y = 1;
+ 130   3                              break;
+ 131   3                      }
+ 132   2              }
+ 133   1              return ang;
+ 134   1      }
+ 135          
+ 136          F32 Para_A(U16 adc0,U16 adc1,F32 angle0,F32 angle1)
+ 137          {
+ 138   1              F32 a;
+ 139   1              a = ((F32)adc0*sin(Angle_Conversion(angle1))-(F32)adc1*sin(Angle_Conversion(angle0)))
+ 140   1              /(sin(Angle_Conversion(angle1))-sin(Angle_Conversion(angle0)));
+ 141   1              return a;
+ 142   1      }
+ 143          
+ 144          F32 Para_K(U16 adc0,U16 adc1,F32 angle0,F32 angle1)
+ 145          {
+ 146   1              F32 k;
+ 147   1              k = sin(Angle_Conversion(angle1))/((F32)adc1-Para_A(adc0,adc1,angle0,angle1));
+ 148   1              return k;
+ 149   1      }
+ 150          
+ 151          void Para_Calculate(U8 xy)
+ 152          {
+ 153   1              U8 i;
+ 154   1              for(i=0;i<(Para_Set_Buffer[36]/2-1);i++)
+ 155   1              {
+ 156   2                      if(i==(Para_Set_Buffer[36]/2-1)/2)
+ 157   2                      {
+ 158   3                              a[xy][i] = Para_A(Angle_Buffer[xy][0],Angle_Buffer[xy][i+1],Cal_Angle[xy][0],Cal_Angle[xy][i+1]);
+ 159   3                              k[xy][i] = Para_K(Angle_Buffer[xy][0],Angle_Buffer[xy][i+1],Cal_Angle[xy][0],Cal_Angle[xy][i+1]);
+ 160   3                      }
+ 161   2                      else
+ 162   2                      {
+ 163   3                              a[xy][i] = Para_A(Angle_Buffer[xy][i],Angle_Buffer[xy][i+1],Cal_Angle[xy][i],Cal_Angle[xy][i+1]);
+ 164   3                              k[xy][i] = Para_K(Angle_Buffer[xy][i],Angle_Buffer[xy][i+1],Cal_Angle[xy][i],Cal_Angle[xy][i+1]);
+ 165   3                      }
+ 166   2              }
+ 167   1      }
+ 168          
+ 169          F32 Tc_Para_compensation(U8 xy)
+ 170          {
+ 171   1              F32 xdata k;
+ 172   1              if(Temperature>=Tc_Buffer[0])
+ 173   1                      k=((F32)Angle_Tc_Buffer[xy][1]-(F32)Angle_Tc_Buffer[xy][0])/((F32)Tc_Buffer[1]-(F32)Tc_Buffer[0]);
+ 174   1              else
+ 175   1                      k=((F32)Angle_Tc_Buffer[xy][2]-(F32)Angle_Tc_Buffer[xy][0])/((F32)Tc_Buffer[2]-(F32)Tc_Buffer[0]);
+ 176   1              return k;
+ 177   1      }
+
+
+C51 COMPILER V7.06   PRECISION_CALIBRATION                                                 08/13/2010 09:53:14 PAGE 4   
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2147    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       9
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3      36
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

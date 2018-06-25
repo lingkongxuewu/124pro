@@ -1,0 +1,14 @@
+C51 COMPILER V7.06   DATA_MODIFICATION                                                     09/14/2009 15:33:15 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE DATA_MODIFICATION
+OBJECT MODULE PLACED IN .\Data_Modification.obj
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE ..\Sinocom_CAN_Module_20090914\Data_Modification.c BROWSE DEBUG OBJECTEXTEN
+                    -D PRINT(.\Data_Modification.lst) OBJECT(.\Data_Modification.obj)
+
+stmt level    source
+
+*** ERROR C318 OF ..\Sinocom_CAN_Module_20090914\Data_Modification.c: can't open file '..\Sinocom_CAN_Module_20090914\Da
+             -ta_Modification.c'
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  1 ERROR(S)

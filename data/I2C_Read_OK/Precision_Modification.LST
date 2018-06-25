@@ -1,0 +1,128 @@
+C51 COMPILER V7.06   PRECISION_MODIFICATION                                                09/15/2009 10:00:27 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE PRECISION_MODIFICATION
+OBJECT MODULE PLACED IN Precision_Modification.OBJ
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE Precision_Modification.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include "Precision_Modification.h"   
+   2               
+   3          #include "parameter_defs.h"
+   4          #include "Function_defs.h"
+   5          #include "Interrupt_ISR.h"
+   6          #include "MyFlash.h"
+   7          #include "stdio.h"
+   8          #include "Mcu_Init.h"
+   9          #include "math.h"
+  10          
+  11          F32 Angle_Conversion(U8 angle)
+  12          {
+  13   1              F32 arc_angle;
+  14   1              arc_angle = 180/(PI*angle);
+  15   1              return arc_angle;       
+  16   1      }
+  17          
+  18          void Data_Capture(U8 angle,U8 xy,U16 mv)
+  19          {
+  20   1              switch(angle)
+  21   1              {
+  22   2                      case ANGLE0:
+  23   2                              Angle_Buffer[xy][0] = mv;
+  24   2                              break;  
+  25   2                      case ANGLE5:
+  26   2                              Angle_Buffer[xy][1] = mv;
+  27   2                          break;
+  28   2                      case ANGLE10:
+  29   2                              Angle_Buffer[xy][2] = mv;
+  30   2                              break;
+  31   2                      case ANGLE15:
+  32   2                              Angle_Buffer[xy][3] = mv;
+  33   2                          break;
+  34   2                      case ANGLE30:
+  35   2                              Angle_Buffer[xy][4] = mv;
+  36   2                               break;
+  37   2                      case M_ANGLE5:
+  38   2                              Angle_Buffer[xy][5] = mv;
+  39   2                          break;
+  40   2                      case M_ANGLE10:
+  41   2                              Angle_Buffer[xy][6] = mv;
+  42   2                          break;
+  43   2                      case M_ANGLE15:
+  44   2                              Angle_Buffer[xy][7] = mv;
+  45   2                          break;
+  46   2                      case M_ANGLE30:
+  47   2                              Angle_Buffer[xy][8] = mv;
+  48   2                          break;
+  49   2              }
+  50   1      }
+  51          
+  52          F32 Precision_Modificate(U16 mv,U8 xy)
+  53          {
+  54   1              F32 xdata ang;
+  55   1              if(mv> Angle_Buffer[xy][0] && mv < Angle_Buffer[xy][1])
+C51 COMPILER V7.06   PRECISION_MODIFICATION                                                09/15/2009 10:00:27 PAGE 2   
+
+  56   1              {
+  57   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][0],Angle_Buffer[xy][1],0,5))/0.07);           
+  58   2              }
+  59   1              else if(mv>=Angle_Buffer[xy][1] && mv <Angle_Buffer[xy][2])
+  60   1              {
+  61   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][1],Angle_Buffer[xy][2],5,10))/0.07);
+  62   2              }
+  63   1              else if(mv>=Angle_Buffer[xy][2] && mv <Angle_Buffer[xy][3])
+  64   1              {
+  65   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][2],Angle_Buffer[xy][3],10,15))/0.07);
+  66   2              }
+  67   1              else if(mv>=Angle_Buffer[xy][3] && mv <=Angle_Buffer[xy][4])
+  68   1              {
+  69   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][3],Angle_Buffer[xy][4],15,30))/0.07);
+  70   2              }
+  71   1              else if(mv>Angle_Buffer[xy][5] && mv <=Angle_Buffer[xy][0])
+  72   1              {
+  73   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][0],Angle_Buffer[xy][5],0,-5))/0.07);
+  74   2              }
+  75   1              else if(mv>Angle_Buffer[xy][6] && mv <=Angle_Buffer[xy][5])
+  76   1              {
+  77   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][5],Angle_Buffer[xy][6],-5,-10))/0.07);
+  78   2              }
+  79   1              else if(mv>Angle_Buffer[xy][7] && mv <=Angle_Buffer[xy][6])
+  80   1              {
+  81   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][6],Angle_Buffer[xy][7],-10,-15))/0.07);
+  82   2              }
+  83   1              else if(mv>=Angle_Buffer[xy][8] && mv <=Angle_Buffer[xy][7])
+  84   1              {
+  85   2                      ang = asin((mv/1000.0-2.5-Para_A(Angle_Buffer[xy][7],Angle_Buffer[xy][8],-15,-30))/0.07);
+  86   2              }
+  87   1              return ang;
+  88   1      }
+  89          
+  90          F32 Para_A(U16 adc0,U16 adc1,S8 angle0,S8 angle1)
+  91          {
+  92   1              F32 a;
+  93   1              a = ((adc0/1000.0-2.5)*sin(Angle_Conversion(angle1))-(adc1/1000.0-2.5)*sin(Angle_Conversion(angle0)))
+  94   1              /(sin(Angle_Conversion(angle1))-sin(Angle_Conversion(angle0)));
+  95   1              return a;
+  96   1      }
+  97          
+  98          F32 Para_K(U16 adc0,U16 adc1,S8 angle0,S8 angle1)
+  99          {
+ 100   1              F32 k;
+ 101   1              k = sin(Angle_Conversion(angle1))*0.07/(adc1/1000.0-2.5-Para_A(adc0,adc1,angle0,angle1));
+ 102   1              return k;
+ 103   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1290    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       4
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      15
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

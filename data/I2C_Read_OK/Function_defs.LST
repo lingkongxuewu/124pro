@@ -1,0 +1,213 @@
+C51 COMPILER V7.06   FUNCTION_DEFS                                                         08/13/2010 10:00:44 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE FUNCTION_DEFS
+OBJECT MODULE PLACED IN Function_defs.OBJ
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE Function_defs.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          
+   2          #include "compiler_defs.h"
+   3          #include "C8051F500_defs.h"                     
+   4          #include "parameter_defs.h"
+   5          #include "Function_defs.h"
+   6          #include "Interrupt_ISR.h"
+   7          #include "MyFlash.h"
+   8          #include "stdio.h"
+   9          #include "Mcu_Init.h"
+  10          #include "math.h"
+  11          
+  12          
+  13          
+  14          void Delay(U8 time)
+  15          {
+  16   1              U16 delay_count;
+  17   1              switch(time)
+  18   1              {
+  19   2                      case SHORT:
+  20   2                              for(delay_count=0;delay_count<100;delay_count++);
+  21   2                      break;
+  22   2                      case MIDDLE:
+  23   2                              for(delay_count=0;delay_count<1000;delay_count++);
+  24   2                      break;
+  25   2                      case LONG:
+  26   2                              for(delay_count=0;delay_count<10000;delay_count++);
+  27   2                      break;
+  28   2              }
+  29   1      }
+  30          
+  31          
+  32          
+  33          void I2C_Start(void)
+  34          {
+  35   1              I2C_SDA=1;
+  36   1              I2C_SCL=1;
+  37   1              Delay(SHORT);
+  38   1              I2C_SDA=0;
+  39   1              Delay(SHORT);
+  40   1              I2C_SCL=0;
+  41   1              Delay(SHORT);
+  42   1      }
+  43          
+  44          void I2C_Stop(void)
+  45          {
+  46   1              I2C_SDA=0;
+  47   1              I2C_SCL=1;
+  48   1              Delay(SHORT);
+  49   1              I2C_SDA=1;
+  50   1              Delay(SHORT);
+  51   1              I2C_SCL=0;
+  52   1              Delay(SHORT);
+  53   1      }
+  54          
+  55          void WriteI2Cbyte (U8 I2C_data)
+C51 COMPILER V7.06   FUNCTION_DEFS                                                         08/13/2010 10:00:44 PAGE 2   
+
+  56          {
+  57   1              U8 xdata i,j;
+  58   1              I2C_SCL = 0;
+  59   1              Delay(SHORT);
+  60   1              for(i=0;i<8;i++)
+  61   1              {
+  62   2                      j = I2C_data & 0x80;
+  63   2      //              if(j==1)
+  64   2                      {
+  65   3                              I2C_SDA =1;
+  66   3                              Delay(SHORT);
+  67   3                              I2C_SCL = 1;
+  68   3                              Delay(SHORT);
+  69   3                              I2C_SCL = 0;
+  70   3                              Delay(SHORT);
+  71   3                      }       
+  72   2      /*              else if(j == 0)
+  73   2                      {
+  74   2                              I2C_SDA = 0;
+  75   2                              I2C_SCL = 1;
+  76   2                              Delay(SHORT);
+  77   2                              I2C_SCL = 0;
+  78   2                              Delay(SHORT);
+  79   2                      }*/
+  80   2                      I2C_data = I2C_data << 1;
+  81   2              }
+  82   1      }
+  83          
+  84          
+  85          
+  86          
+  87          
+  88          
+  89          
+  90          
+  91          
+  92          
+  93          
+  94          
+  95          
+  96          
+  97          
+  98          
+  99          
+ 100          
+ 101          
+ 102          
+ 103          
+ 104          
+ 105          void I2C_WaitACK(void)
+ 106          {
+ 107   1         U8 j=0;
+ 108   1      //   I2C_SDA_IN();
+ 109   1         Delay(SHORT);
+ 110   1         I2C_SCL = 1;
+ 111   1         Delay(SHORT);
+ 112   1         while((I2C_SDA == 1 )&& (j<500))
+ 113   1         {
+ 114   2                      j++;
+ 115   2         }
+ 116   1         I2C_SCL = 0;
+ 117   1         Delay(SHORT);
+C51 COMPILER V7.06   FUNCTION_DEFS                                                         08/13/2010 10:00:44 PAGE 3   
+
+ 118   1      //   I2C_SDA_OUT();     
+ 119   1      }
+ 120          
+ 121          void I2C_SDA_IN(void)
+ 122          {       
+ 123   1              U8 sfrpage_save = SFRPAGE;
+ 124   1              SFRPAGE  = CONFIG_PAGE;
+ 125   1              P1MDOUT &= 0x77;
+ 126   1              Delay(MIDDLE);
+ 127   1              SFRPAGE = sfrpage_save;
+ 128   1      }
+ 129          
+ 130          void I2C_SDA_OUT(void)
+ 131          {       
+ 132   1              U8 sfrpage_save = SFRPAGE;
+ 133   1              SFRPAGE  = CONFIG_PAGE;
+ 134   1              P1MDOUT |= 0xFD;
+ 135   1              Delay(MIDDLE);
+ 136   1              SFRPAGE = sfrpage_save;
+ 137   1      }
+ 138          U8 ReadI2Cbyte(void)
+ 139          {
+ 140   1              
+ 141   1              U8 xdata i,j,k;                 
+ 142   1              j = 0;
+ 143   1      //      I2C_SDA_IN();
+ 144   1      //      printf("j=%d",(U16)j);
+ 145   1              for(i=0;i<8;i++)
+ 146   1              {
+ 147   2                      j = j<<1;
+ 148   2      //              I2C_SDA = 1;
+ 149   2                      I2C_SCL = 1;
+ 150   2                      Delay(SHORT);
+ 151   2                      k = I2C_SDA;
+ 152   2                      Delay(SHORT);
+ 153   2                      I2C_SCL = 0;
+ 154   2                      if(k==1)
+ 155   2                      {
+ 156   3                              j +=1; 
+ 157   3                      }       
+ 158   2              }
+ 159   1      //      I2C_SDA_OUT();
+ 160   1      //      Delay(LONG);\b
+ 161   1          
+ 162   1              
+ 163   1              return j;
+ 164   1      }
+ 165          
+ 166          
+ 167          
+ 168          
+ 169          
+ 170          
+ 171          
+ 172          
+ 173          
+ 174          
+ 175          
+ 176          
+ 177          
+ 178          
+ 179          
+C51 COMPILER V7.06   FUNCTION_DEFS                                                         08/13/2010 10:00:44 PAGE 4   
+
+ 180          
+ 181          
+ 182          
+ 183          
+ 184          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    271    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----       5
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

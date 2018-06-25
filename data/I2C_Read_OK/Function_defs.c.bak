@@ -1,0 +1,546 @@
+
+#include "compiler_defs.h"
+#include "C8051F500_defs.h"           		
+#include "parameter_defs.h"
+#include "Function_defs.h"
+#include "Interrupt_ISR.h"
+#include "MyFlash.h"
+#include "stdio.h"
+#include "Mcu_Init.h"
+#include "math.h"
+extern counter;
+
+U8 _Can_data(U8 can_byte)
+{
+	U8 re_data;
+	switch(can_byte)
+	{
+		case FSC:
+			 = (U8)(CAN0IF1DA1&0xff);
+		break;
+		case DATA0:
+			re_data = (U8)(CAN0IF1DA1>>8);
+		break;
+		case DATA1:
+			re_data = (U8)(CAN0IF1DA2&0xff);
+		break;
+		case DATA2:
+			re_data = (U8)(CAN0IF1DA2>>8);
+		break;
+		case DATA3:
+			re_data = (U8)(CAN0IF1DB1&0xff);
+		break;
+		case DATA4:
+			re_data = (U8)(CAN0IF1DB1>>8);
+		break;
+		case DATA5:
+			re_data = (U8)(CAN0IF1DB2&0xff);
+		break;
+		case DATA6:
+			re_data = (U8)(CAN0IF1DB2>>8);
+		break;
+	}
+	return re_data;
+}
+ 
+void Delay(U8 time)
+{
+	U16 delay_count;
+	switch(time)
+	{
+		case SHORT:
+			for(delay_count=0;delay_count<100;delay_count++);
+		break;
+		case MIDDLE:
+			for(delay_count=0;delay_count<1000;delay_count++);
+		break;
+		case LONG:
+			for(delay_count=0;delay_count<10000;delay_count++);
+		break;
+	}
+}
+
+void Can_Data_Read(void)
+{  	U8 carry; 
+   	U8 status = CAN0STAT;               
+   	U8 Interrupt_ID = CAN0IID;        
+
+   
+   	New_Data.U8[b0] = CAN0ND1L;         
+   	New_Data.U8[b1] = CAN0ND1H;
+   	New_Data.U8[b2] = CAN0ND2L;
+	New_Data.U8[b3] = CAN0ND2H;         
+   	carry = New_Data.U8[b0] & 0x01;     
+   	New_Data.U32 = New_Data.U32 >> 1;   
+
+   	if (carry == 1)  
+    {  
+		New_Data.U8[b3] = New_Data.U8[b3] | 0x80; 
+	}
+   	CAN0IF1CM = 0x007F;                
+
+  	CAN0IF1CR = Interrupt_ID;           
+	  
+	Can_BusyF1Test();
+
+   	if (status & RxOk)                  
+   	{
+        if (Interrupt_ID == 0x20) 
+        {
+			Interrupt_ID = 0x00; 
+		}
+	   Can_Receive_Data[0][Interrupt_ID] = CAN0IF1DA1;    
+       Can_Receive_Data[1][Interrupt_ID] = CAN0IF1DA2;    
+       Can_Receive_Data[2][Interrupt_ID] = CAN0IF1DB1;    
+       Can_Receive_Data[3][Interrupt_ID] = CAN0IF1DB2;    
+   	}
+    
+    if(Interrupt_ID == 0x01)
+	{
+		Reply_flag = 1;
+	}
+	if(Interrupt_ID == 0x0)
+	{
+		Set_Para_flag = 1;
+	}
+   	if (status & LEC)                 
+   	{
+       if ((status & LEC) != 0x07) 
+       {
+          CAN_ERROR = 1; 
+       }
+   	}
+   	if (status & BOff)
+      	CAN_ERROR = 1;
+
+   	if (status & EWarn)
+      	CAN_ERROR = 1;
+
+	Count=Interrupt_ID;
+}
+
+void Can_Data_Tx(void)
+{
+   U8 Interrupt_ID = CAN0IID;          
+   CAN0IF2CM = 0x0008;              
+   CAN0IF2CR = Interrupt_ID;          	  
+ //  while (!(CAN0IF2CRH & 0x80));       // Poll on Busy bit
+	Can_BusyF2Test();
+}
+
+void Frame_Process(void)
+{	U8 i;	
+		
+	if(Set_Para_flag == 1)
+	{
+		if(_Can_data(FSC)>=R_CYCLE_TIME && _Can_data(FSC)<=R_ID_MODE)
+		{
+			Reply_Para_flag = 1;
+			Reply_Para_Frame[0] = _Can_data(FSC);
+			for(i=1;i<8;i++)
+				Reply_Para_Frame[i] = 0;
+		}
+		switch(_Can_data(FSC))
+		{
+			case RESET:
+				_Reset();
+				break;
+			case R_CYCLE_TIME:
+				_Cycle_time(READ);
+				break;
+			case R_CYCLE_MODE:
+				_Cycle_mode(READ);
+				break;
+			case R_REQUEST_POS_ID:
+				_Request_pos_id(READ);
+				break;
+			case R_REPLY_POS_ID:
+				_Reply_pos_id(READ);
+				break;
+			case R_CYCLE_POS_ID:
+				_Cycle_pos_id(READ);
+				break;
+			case R_SET_PARAMETER_ID:
+				_Set_parameter_id(READ);
+				break;
+			case R_REPLY_PARAMETER_ID:
+				_Reply_parameter_id(READ);
+				break;
+			case R_BAUD_RATE:
+				_Baud_rate(READ);
+				break;
+			case R_FLOAT_AV:
+				_Float_av(READ);
+				break;
+			case R_ZERO_OFFSET:
+				_Zero_offset(READ);
+				break;
+			case R_ID_MODE:
+				_ID_mode(READ);
+				break;
+
+			case W_CYCLE_TIME:
+				_Cycle_time(WRITE);
+				break;
+			case W_CYCLE_MODE:
+				_Cycle_mode(WRITE);
+				break;
+			case W_REQUEST_POS_ID:
+				_Request_pos_id(WRITE);
+				break;
+			case W_REPLY_POS_ID:
+				_Reply_pos_id(WRITE);
+				break;
+			case W_CYCLE_POS_ID:
+				_Cycle_pos_id(WRITE);
+				break;
+			case W_SET_PARAMETER_ID:
+				_Set_parameter_id(WRITE);
+				break;
+			case W_REPLY_PARAMETER_ID:
+				_Reply_parameter_id(WRITE);
+				break;
+			case W_BAUD_RATE:
+				_Baud_rate(WRITE);
+				break;
+			case W_FLOAT_AV:
+				_Float_av(WRITE);
+				break;
+			case W_ZERO_OFFSET:
+				_Zero_offset(WRITE);
+				break;
+			case W_ID_MODE:
+				_ID_mode(WRITE);
+				break;
+			case DEFAULT_SET:
+				Default_Parameter();
+				Load_Default_flag = 1;
+				break;
+		}
+		Set_Para_flag = 0;
+	}
+	if(_Can_data(FSC)== REQUEST_DATA)
+	{
+		if(Reply_flag == 1)
+		{
+			Reply_flag = 0;
+			TX_Reply = 1;
+		}
+	}
+	
+}
+
+void _Reset(void)
+{
+//	printf("Reset\n");
+	U8 SFRPAGE_save = SFRPAGE;
+   SFRPAGE = ACTIVE_PAGE;
+
+	_Parameter_Flash_Write();
+	Delay(LONG);
+	RSTSRC = 0x10;
+	SFRPAGE = SFRPAGE_save;	
+}
+
+void _Baud_rate(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[1];
+			break;
+		case WRITE:
+			Para_Set_Buffer[1] = _Can_data(DATA0);
+			break;
+	}
+}
+
+void _Float_av(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[2]; 
+			break;
+		case WRITE:
+			Para_Set_Buffer[2] = _Can_data(DATA0);
+			break;
+	}
+}
+
+void _Cycle_time(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[3];
+			Reply_Para_Frame[2] = Flash_Buffer[4];
+			break;
+		case WRITE:
+			Para_Set_Buffer[3] = _Can_data(DATA0);
+			Para_Set_Buffer[4] = _Can_data(DATA1);
+			break;
+	}	
+}
+
+void _Cycle_mode(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[5];
+			break;
+		case WRITE:
+			Para_Set_Buffer[5] = _Can_data(DATA0);
+			break;
+	}
+}
+
+void _Zero_offset(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[6];
+			Reply_Para_Frame[2] = Flash_Buffer[7];
+			break;
+		case WRITE:
+			Para_Set_Buffer[6] = _Can_data(DATA0);
+			Para_Set_Buffer[7] = _Can_data(DATA1);
+			break;
+	}
+}
+
+void _Request_pos_id(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[8];
+			Reply_Para_Frame[2] = Flash_Buffer[9];
+			Reply_Para_Frame[3] = Flash_Buffer[10];
+			Reply_Para_Frame[4] = Flash_Buffer[11];
+			break;
+		case WRITE:
+			Para_Set_Buffer[8]  = _Can_data(DATA0);
+			Para_Set_Buffer[9]  = _Can_data(DATA1);
+			Para_Set_Buffer[10] = _Can_data(DATA2);
+			Para_Set_Buffer[11] = _Can_data(DATA3);
+			break;
+	}
+}
+
+void _Reply_pos_id(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[12];
+			Reply_Para_Frame[2] = Flash_Buffer[13];
+			Reply_Para_Frame[3] = Flash_Buffer[14];
+			Reply_Para_Frame[4] = Flash_Buffer[15];
+			break;
+		case WRITE:
+			Para_Set_Buffer[12] = _Can_data(DATA0);
+			Para_Set_Buffer[13] = _Can_data(DATA1);
+			Para_Set_Buffer[14] = _Can_data(DATA2);
+			Para_Set_Buffer[15] = _Can_data(DATA3);
+			break;
+	}
+}
+
+void _Cycle_pos_id(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[16];
+			Reply_Para_Frame[2] = Flash_Buffer[17];
+			Reply_Para_Frame[3] = Flash_Buffer[18];
+			Reply_Para_Frame[4] = Flash_Buffer[19];
+			break;
+		case WRITE:
+			Para_Set_Buffer[16]  = _Can_data(DATA0);
+			Para_Set_Buffer[17]  = _Can_data(DATA1);
+			Para_Set_Buffer[18]  = _Can_data(DATA2);
+			Para_Set_Buffer[19]  = _Can_data(DATA3);
+			break;
+	}
+}
+
+void _Set_parameter_id(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[20];
+			Reply_Para_Frame[2] = Flash_Buffer[21];
+			Reply_Para_Frame[3] = Flash_Buffer[22];
+			Reply_Para_Frame[4] = Flash_Buffer[23];
+			break;
+		case WRITE:
+			Para_Set_Buffer[20]  = _Can_data(DATA0);
+			Para_Set_Buffer[21]  = _Can_data(DATA1);
+			Para_Set_Buffer[22]  = _Can_data(DATA2);
+			Para_Set_Buffer[23]  = _Can_data(DATA3);
+			break;
+	}
+}
+
+void _Reply_parameter_id(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[24];
+			Reply_Para_Frame[2] = Flash_Buffer[25];
+			Reply_Para_Frame[3] = Flash_Buffer[26];
+			Reply_Para_Frame[4] = Flash_Buffer[27];
+			break;
+		case WRITE:
+			Para_Set_Buffer[24]  = _Can_data(DATA0);
+			Para_Set_Buffer[25]  = _Can_data(DATA1);
+			Para_Set_Buffer[26]  = _Can_data(DATA2);
+			Para_Set_Buffer[27]  = _Can_data(DATA3);
+			break;
+	}
+}
+
+void _ID_mode(U8 rw)
+{
+	switch(rw)
+	{
+		case READ:
+			Reply_Para_Frame[1] = Flash_Buffer[28];	
+			break;
+		case WRITE:
+			Para_Set_Buffer[28] = _Can_data(DATA0);
+			break;
+	}
+}
+void _Parameter_Flash_Write(void)
+{
+	U8 buf_count;
+	U16 addr;
+	addr = 0x7A00;
+	if(Load_Default_flag == 0)
+		Para_Set_Buffer[0] = 0;
+	FLASH_PageErase (0x7A00);
+	for(buf_count = 0; buf_count < 30; buf_count++)
+	{			    
+   		FLASH_ByteWrite (addr, Para_Set_Buffer[buf_count]);
+		addr++;
+	}
+}
+
+U8 _Parameter_Error(void)
+{
+	if((Para_Set_Buffer[23]>0x1F)||(Para_Set_Buffer[27]>0x1F)
+	||(Para_Set_Buffer[11]>0x1F)|(Para_Set_Buffer[15]>0x1F)||(Para_Set_Buffer[19]>0x1F)
+	||(Para_Set_Buffer[9]>0x7)||(Para_Set_Buffer[13]>0x7)
+	||(Para_Set_Buffer[17]>0x7)||(Para_Set_Buffer[21]>0x7)||(Para_Set_Buffer[25]>0x7)
+	||(Para_Set_Buffer[0]>0x1)||(Para_Set_Buffer[1]>0x8)||(Para_Set_Buffer[5]>0x1))
+	{
+		return 1;
+	}
+	return 0;
+}
+
+void SPI_Write(U8 spi_data)
+{
+	U8 i, j;
+
+ 	SPI_CLK = 1;
+ 
+  	for(i = 0; i < 8; i++)
+   	{
+     	j = spi_data & 0x80;
+     	if (j == 0)
+      	{
+        	SPI_MOSI = 0;
+        	Delay(MIDDLE); 
+        	SPI_CLK =  0;
+        	Delay(MIDDLE); 
+        	SPI_CLK =  1;
+        	Delay(MIDDLE); 
+      	}
+     	else
+      	{
+			SPI_MOSI = 1;
+        	Delay(MIDDLE); 
+        	SPI_CLK =  0;
+        	Delay(MIDDLE); 
+        	SPI_CLK =  1;
+        	Delay(MIDDLE);
+      	} 
+     	spi_data = spi_data << 1;
+   }
+}
+
+void SPI_Read(void)
+{
+	U8 i,j,k;
+  	k = 0;
+  
+  	SPI_CLK = 1;
+
+  	for(i = 0; i < 8; i++)
+   	{
+    	k = k << 1;
+     	SPI_MOSI = 0;
+     	Delay(MIDDLE);
+     	SPI_CLK =  0;
+     	Delay(MIDDLE);
+     	SPI_CLK =  1;
+     	Delay(MIDDLE); 
+     	j = SPI_MISO;
+      
+     	if (j == 1)
+      	{
+       		k += 1;
+      	}
+   	}
+  	Temperature = (S8)(((197 - k) / 1.083)); 
+}
+
+S8 SPI_Process(void)
+{
+	SPI_CLK = 1;
+   	NOP();
+     
+    SPI_CSB = 0; 
+    NOP();  
+  
+    SPI_Write(0x08);                        
+    Delay(MIDDLE);
+  
+    SPI_Read();                        
+        
+    SPI_CSB = 1;
+    NOP();   
+	return Temperature;
+}
+
+U8 Can_Float_Average(void)
+{	U8 av;
+	
+	switch(Flash_Buffer[2])
+	{
+		case 0:
+			av = 1;
+		break;
+		case 1:
+			av = 2;
+		break;
+		case 2:
+			av = 4;
+		break;
+		case 3:
+			av = 8;
+		break;
+		case 4:
+			av = 16;
+		break;
+	}
+	return av;
+}

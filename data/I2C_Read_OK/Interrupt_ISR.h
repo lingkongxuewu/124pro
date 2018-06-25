@@ -1,0 +1,44 @@
+
+
+extern bit CAN_ERROR;                                             
+extern UU64 xdata Rx_Data;
+extern U16 xdata Count,Counter;
+extern U8 xdata TX_OK;
+extern UU32 xdata New_Data;
+extern U16 xdata Can_Receive_Data[4][32];
+extern U8 xdata Para_Set_Buffer[255];
+extern U8 xdata Time_Mode;
+extern U16 xdata Cycle_Time_Value;
+extern U16 xdata Angle_Value;
+extern U16 xdata mV_X;
+extern U16 xdata mV_Y;
+extern U8 xdata X_Value1,X_Value2,Y_Value1,Y_Value2;
+extern U8 xdata Reply_flag;
+extern U8 xdata TX_Reply;
+extern U8 xdata Set_Para_flag;
+extern U8 xdata Reply_Para_Frame[8];
+extern U8 xdata Reply_Para_flag;
+extern U8 xdata Load_Default_flag;
+extern U16 xdata Temperature;
+extern U8 xdata Temp1,Temp2;
+extern U16 xdata Angle_Buffer[2][25];
+extern U8 xdata Calibrate_flag,Calibrate_Enter;
+extern F32 xdata a[2][24],k[2][24];
+extern S16 xdata X_Value,Y_Value;
+extern U8 xdata Neg_X,Neg_Y;
+extern F32 xdata Cal_Angle[2][25],Power;
+extern U8 xdata Cal_Count;
+extern U8 xdata Angle_1,Angle_2,Dir_XY;
+extern F32 xdata X_Offset,Y_Offset;
+extern U8 xdata Reset_Flag;
+extern U8 xdata Sensor_Error;
+extern U8 xdata Flash_b[33];
+extern U16 xdata tf0,tf1,tf2;
+extern U32 xdata Power_sum;
+extern U8 xdata Tc_Enter,Tc_Count;
+extern U16 xdata Angle_Tc_Buffer[2][3];
+extern S16 xdata Tc_Buffer[3];
+extern U16 xdata Power_buffer,Power_saved;
+extern U8 xdata Power_Enter,Compen_State;
+//extern U8 xdata Calibrate_State;
+

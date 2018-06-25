@@ -1,0 +1,333 @@
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE I2C_TST
+OBJECT MODULE PLACED IN I2C_tst.OBJ
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE I2C_tst.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          
+   2          
+   3          //-----------------------------------------------------------------------------
+   4          // Includes
+   5          //-----------------------------------------------------------------------------
+   6          
+   7          #include <compiler_defs.h>
+   8          #include <C8051F500_defs.h>            // SFR declarations
+   9          #include <stdio.h>
+  10          
+  11          //-----------------------------------------------------------------------------
+  12          // Global CONSTANTS
+  13          //-----------------------------------------------------------------------------
+  14          
+  15          #define SYSCLK      24000000           // SYSCLK frequency in Hz
+  16          #define BAUDRATE      115200           // Baud rate of UART in bps
+  17          #define SHORT                                   1
+  18          #define MIDDLE                                  2
+  19          #define LONG                                    3
+  20          #define TEN                                             4
+  21          sbit    I2C_SCL                                 = P1^0;
+  22          sbit    I2C_SDA                         = P1^3;
+  23          //-----------------------------------------------------------------------------
+  24          // Function PROTOTYPES
+  25          //-----------------------------------------------------------------------------
+  26          
+  27          void SYSCLK_Init (void);
+  28          void UART0_Init (void);
+  29          void PORT_Init (void);
+  30          void Delay(U8 time);
+  31          void WriteI2Cbyte (U8 I2C_data);
+  32          U8 ReadI2Cbyte(U8 ackvalue);
+  33          void I2C_WaitACK(void);
+  34          void I2C_Start(void);
+  35          void I2C_Stop(void);
+  36          
+  37          //-----------------------------------------------------------------------------
+  38          // MAIN Routine
+  39          //-----------------------------------------------------------------------------
+  40          
+  41          void main (void)
+  42          {
+  43   1              U16 xdata yr,i,j;
+  44   1              U8 xdata tempr[2];
+  45   1              SFRPAGE = ACTIVE_PAGE;              // Change for PCA0MD and SBUF0
+  46   1              PCA0MD &= ~0x40;                    // Disable the watchdog timer
+  47   1      
+  48   1              PORT_Init ();                       // Initialize Port I/O
+  49   1              SYSCLK_Init ();                     // Initialize Oscillator
+  50   1              UART0_Init ();
+  51   1              I2C_SDA = 1;
+  52   1              I2C_SCL = 1;
+  53   1              
+  54   1              for(j=0;j<10;j++)
+  55   1              {
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 2   
+
+  56   2                      for(i=0;i<50000;i++);
+  57   2                      Delay(LONG);for(i=0;i<50000;i++);
+  58   2              }
+  59   1      
+  60   1              I2C_Start();
+  61   1              WriteI2Cbyte(0x20);
+  62   1              I2C_WaitACK();
+  63   1              Delay(SHORT);
+  64   1              WriteI2Cbyte(0x70);
+  65   1              I2C_WaitACK();
+  66   1              Delay(SHORT);
+  67   1              I2C_Stop();
+  68   1              for(j=0;j<10;j++)
+  69   1              {
+  70   2                      for(i=0;i<50000;i++);
+  71   2                      Delay(LONG);for(i=0;i<50000;i++);
+  72   2              }
+  73   1      
+  74   1          while (1)
+  75   1          {
+  76   2                      I2C_Start();
+  77   2                      Delay(SHORT);
+  78   2                      WriteI2Cbyte(0x20);
+  79   2                      I2C_WaitACK();
+  80   2                      Delay(SHORT);
+  81   2                      WriteI2Cbyte(0x80);
+  82   2                      I2C_WaitACK();
+  83   2                      I2C_Stop();
+  84   2                      
+  85   2                      Delay(LONG);
+  86   2                      I2C_Start();
+  87   2                      WriteI2Cbyte(0x21);
+  88   2                      I2C_WaitACK();
+  89   2      
+  90   2                      tempr[0] = ReadI2Cbyte(0);
+  91   2                      tempr[1] = ReadI2Cbyte(1);
+  92   2                      I2C_Stop();
+  93   2              
+  94   2                      yr= ((U16)(tempr[0]<<8))|tempr[1];
+  95   2                      printf("yr=%d\n",(U16)yr);
+  96   2                      for(i=0;i<50000;i++);
+  97   2         }
+  98   1      }
+  99          
+ 100          //-----------------------------------------------------------------------------
+ 101          // Initialization Subroutines
+ 102          //-----------------------------------------------------------------------------
+ 103          
+ 104          //-----------------------------------------------------------------------------
+ 105          // PORT_Init
+ 106          //-----------------------------------------------------------------------------
+ 107          //
+ 108          // Return Value : None
+ 109          // Parameters   : None
+ 110          //
+ 111          // Configure the Crossbar and GPIO ports.
+ 112          //
+ 113          // P0.4   digital   push-pull    UART TX
+ 114          // P0.5   digital   open-drain   UART RX
+ 115          //
+ 116          //-----------------------------------------------------------------------------
+ 117          void PORT_Init (void)
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 3   
+
+ 118          {
+ 119   1         U8 SFRPAGE_save = SFRPAGE;
+ 120   1         SFRPAGE = CONFIG_PAGE;
+ 121   1      
+ 122   1         P0MDOUT |= 0x10;                    // Enable UTX as push-pull output
+ 123   1         XBR0    = 0x09;                     // Enable UART on P0.4(TX) and P0.5(RX)
+ 124   1         XBR2    = 0x40;                     // Enable crossbar and weak pull-ups
+ 125   1      
+ 126   1         SFRPAGE = SFRPAGE_save;
+ 127   1      }
+ 128          
+ 129          //-----------------------------------------------------------------------------
+ 130          // SYSCLK_Init
+ 131          //-----------------------------------------------------------------------------
+ 132          //
+ 133          // Return Value : None
+ 134          // Parameters   : None
+ 135          //
+ 136          // This routine initializes the system clock to use the internal oscillator
+ 137          // at its maximum frequency.
+ 138          // Also enables the Missing Clock Detector.
+ 139          //-----------------------------------------------------------------------------
+ 140          
+ 141          void SYSCLK_Init (void)
+ 142          {
+ 143   1         U8 SFRPAGE_save = SFRPAGE;
+ 144   1         SFRPAGE = CONFIG_PAGE;
+ 145   1      
+ 146   1         OSCICN |= 0x87;                     // Configure internal oscillator for
+ 147   1                                             // its maximum frequency
+ 148   1         RSTSRC  = 0x04;                     // Enable missing clock detector
+ 149   1      
+ 150   1         SFRPAGE = SFRPAGE_save;
+ 151   1      }
+ 152          
+ 153          //-----------------------------------------------------------------------------
+ 154          // UART0_Init
+ 155          //-----------------------------------------------------------------------------
+ 156          //
+ 157          // Return Value : None
+ 158          // Parameters   : None
+ 159          //
+ 160          // Configure the UART0 using Timer1, for <BAUDRATE> and 8-N-1.
+ 161          //-----------------------------------------------------------------------------
+ 162          void UART0_Init (void)
+ 163          {
+ 164   1         U8 SFRPAGE_save = SFRPAGE;
+ 165   1         SFRPAGE = CONFIG_PAGE;
+ 166   1      
+ 167   1         SCON0 = 0x10;                       // SCON0: 8-bit variable bit rate
+ 168   1                                             // clear RI0 and TI0 bits
+ 169   1      
+ 170   1         // Baud Rate = [BRG Clock / (65536 - (SBRLH0:SBRLL0))] x 1/2 x 1/Prescaler
+ 171   1      
+ 172   1      #if   ((SYSCLK / BAUDRATE / 2 / 0xFFFF) < 1)
+ 173   1            SBRL0 = -(SYSCLK / BAUDRATE / 2);
+ 174   1            SBCON0 |= 0x03;                  // Set prescaler to 1
+ 175   1      #elif ((SYSCLK / BAUDRATE / 2 / 0xFFFF) < 4)
+                    SBRL0 = -(SYSCLK / BAUDRATE / 2 / 4);
+                    SBCON0 &= ~0x03;
+                    SBCON0 |= 0x01;                  // Set prescaler to 4
+              #elif ((SYSCLK / BAUDRATE / 2 / 0xFFFF) < 12)
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 4   
+
+                    SBRL0 = -(SYSCLK / BAUDRATE / 2 / 12);
+                    SBCON0 &= ~0x03;                 // Set prescaler to 12
+              #else
+                    SBRL0 = -(SYSCLK / BAUDRATE / 2 / 48);
+                    SBCON0 &= ~0x03;
+                    SBCON0 |= 0x02;                  // Set prescaler to 48
+              #endif
+ 187   1      
+ 188   1         SBCON0 |= 0x40;                     // Enable baud rate generator
+ 189   1         TI0 = 1;                            // Indicate TX0 ready
+ 190   1      
+ 191   1         SFRPAGE = SFRPAGE_save;
+ 192   1      }
+ 193          
+ 194          void Delay(U8 time)
+ 195          {
+ 196   1              U16 delay_count;
+ 197   1              switch(time)
+ 198   1              {
+ 199   2                      case SHORT:
+ 200   2                              for(delay_count=0;delay_count<100;delay_count++);
+ 201   2                      break;
+ 202   2                      case MIDDLE:
+ 203   2                              for(delay_count=0;delay_count<1000;delay_count++);
+ 204   2                      break;
+ 205   2                      case LONG:
+ 206   2                              for(delay_count=0;delay_count<10000;delay_count++);
+ 207   2                      break;
+ 208   2                      case TEN:
+ 209   2                              for(delay_count=0;delay_count<30;delay_count++);
+ 210   2                      break;
+ 211   2              }
+ 212   1      }
+ 213          
+ 214          void WriteI2Cbyte (U8 I2C_data)
+ 215          {
+ 216   1              U16 xdata i,j;
+ 217   1              Delay(SHORT);
+ 218   1              I2C_SCL = 0;
+ 219   1              
+ 220   1              for(i=0;i<8;i++)
+ 221   1              {
+ 222   2                      j = I2C_data & 0x80;
+ 223   2                      if(j==0)
+ 224   2                      {
+ 225   3                              I2C_SDA = 0;
+ 226   3                      }       
+ 227   2                      else
+ 228   2                      {
+ 229   3                              I2C_SDA =1;
+ 230   3                      }
+ 231   2                      Delay(TEN);
+ 232   2                      I2C_SCL = 1;
+ 233   2                      Delay(SHORT);
+ 234   2                      I2C_SCL = 0;
+ 235   2                      Delay(SHORT);
+ 236   2                      I2C_data = I2C_data << 1;
+ 237   2              }
+ 238   1              I2C_SDA = 1;
+ 239   1              Delay(SHORT);
+ 240   1      }
+ 241          
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 5   
+
+ 242          void I2C_WaitACK(void)
+ 243          {
+ 244   1              U16 xdata j;
+ 245   1         I2C_SCL = 1;Delay(SHORT);
+ 246   1         while((I2C_SDA == 1 )&& j<10)
+ 247   1         {j++;
+ 248   2         }
+ 249   1         I2C_SCL = 0;Delay(SHORT);
+ 250   1      }
+ 251          
+ 252          void I2C_Start(void)
+ 253          {
+ 254   1              I2C_SDA=1;      Delay(SHORT);
+ 255   1              I2C_SCL=1;      Delay(SHORT);
+ 256   1              I2C_SDA=0;      Delay(SHORT);
+ 257   1              I2C_SCL=0;      Delay(SHORT);
+ 258   1      }
+ 259          
+ 260          void I2C_Stop(void)
+ 261          {
+ 262   1              I2C_SDA=0;
+ 263   1              Delay(SHORT);
+ 264   1              I2C_SCL=1;
+ 265   1              Delay(SHORT);
+ 266   1              I2C_SDA=1;
+ 267   1              Delay(SHORT);
+ 268   1      }
+ 269          
+ 270          U8 ReadI2Cbyte(U8 ackvalue)
+ 271          {       
+ 272   1              U8 xdata i,j;                   
+ 273   1              j = 0;
+ 274   1              for(i=0;i<8;i++)
+ 275   1              {
+ 276   2                      j<<=1;
+ 277   2                      I2C_SCL = 1;
+ 278   2                      Delay(SHORT);
+ 279   2                      if(I2C_SDA == 1)
+ 280   2                      {
+ 281   3                              j |= 1;
+ 282   3                      }
+ 283   2                      else
+ 284   2                      {
+ 285   3                              j &= 0xfe;
+ 286   3                      }
+ 287   2                      I2C_SCL = 0 ;
+ 288   2                      Delay(SHORT);
+ 289   2              }
+ 290   1              I2C_SDA = ackvalue;
+ 291   1              Delay(SHORT);
+ 292   1              I2C_SCL = 1;
+ 293   1              Delay(SHORT);
+ 294   1              I2C_SCL = 0;
+ 295   1              Delay(SHORT);
+ 296   1              I2C_SDA = 1;
+ 297   1              Delay(SHORT);
+ 298   1              return j;
+ 299   1      }
+ 300          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V7.06   I2C_TST                                                               09/15/2010 14:57:20 PAGE 6   
+
+   CODE SIZE        =    856    ----
+   CONSTANT SIZE    =      7    ----
+   XDATA SIZE       =   ----      16
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,33 @@
+C51 COMPILER V7.06   FUNCTION_DEF                                                          08/31/2009 14:23:09 PAGE 1   
+
+
+C51 COMPILER V7.06, COMPILATION OF MODULE FUNCTION_DEF
+OBJECT MODULE PLACED IN Function_def.OBJ
+COMPILER INVOKED BY: d:\Keil\C51\BIN\C51.EXE Function_def.c BROWSE DEBUG OBJECTEXTEND
+
+stmt level    source
+
+   1          #include "Function_def.h"
+*** ERROR C202 IN LINE 30 OF PARAMETER_DEFS.H: 'P1': undefined identifier
+   2          
+   3          
+   4          void Delay(U8 time)
+   5          {
+   6   1              U16 delay_count;
+   7   1              switch(time)
+   8   1              {
+   9   2                      case SHORT:
+  10   2                              for(delay_count=0;delay_count<100;delay_count++);
+  11   2                      break;
+  12   2                      case MIDDLE:
+  13   2                              for(delay_count=0;delay_count<1000;delay_count++);
+  14   2                      break;
+  15   2                      case LONG:
+  16   2                              for(delay_count=0;delay_count<10000;delay_count++);
+  17   2                      break;
+  18   2              }
+  19   1      }
+  20          
+  21          
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  1 ERROR(S)
